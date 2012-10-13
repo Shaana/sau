@@ -24,40 +24,24 @@ import os
 import re
 import subprocess
 import shutil
-import traceback
 
 import Error
 import Reader
 
-
 #TODO add threading support for cloning, with a global class variable to keep track of the cloning instances :D
 #like clone() ... do the threading and call renamed function _clone()
 
-#TODO add a find_repo_folder function
-#make smart TypeError() parameters or replace them with AddonTypeError(), so all error messages look the same
-#NOTE: use a try, except block in the sau.py main function catching AttributeError, in case someone tries to assign a value to a _getter only variable
-#TODO replace system errors with my own errors ! for better messages :)
-
-#TODO add function like get_repo_folder
-
-
-#OSError e.errno, e.filename, e.strerror
-
+#TODO rework parse_pkgmeta_file()
 
 class Addon(object):
     """
-    Represents a World of Warcraft addon with the following attributes:
-        root: the folder containing this addon.
-        name: the name of the addon, this can be anything and wont be used for identification
-        home: root+folder_name, the main folder of the addon (Note that the home folder + *.toc file need to have the same name.
-        url_info: tuple (repo_type, url), type of the repository (currently support: git,svn,hg) and the repository url to update the addon
-        folder_name: the actually name of the folder of the addon
-        protected: if its a protected addon, it cannot be changed (updated, deleted, cleaned, ...)
-    Valid addons are:
-        root, url, repo_type
-        root, folder_name (the folder with an .toc file has to exist !)
+    This represents a World of Warcraft addon. This class allows to update/clone addon repositories
+  
+    It is recommend to embed your code into a try, except block to catch AttributeError 
+    in case you assign a value to a _getter only variable.
     
-    
+    Every _get_* function return None if the variable doesn't exist.
+   
     """
     #using properties, access variables via self#required for TempFolder_i.home, self.name, self.url, etc.
     #counts the number of addon instances, required for TempFolder_i
@@ -67,9 +51,27 @@ class Addon(object):
     _supported_repository_types = ("git", "svn", "hg")
     
     #in our case always the .pkgmeta file
-    _config_file = ".pkgmeta" 
+    _config_file = ".pkgmeta"
+    _config_file_tags = ["package-as", "externals", "ignore", "move-folders", "required-dependencies", "optional-dependencies", "manual-changelog", "license-output", "tools-used", "enable-nolib-creation"]
     
     def __init__(self, root=None, url_info=None, folder_name=None, protected=False, name=None):
+        """
+        A valid addon requires at least the root folder and url_info tuple (repo_type, url) or 
+        a root folder and an addon folder.
+        
+        @param root: the folder containing the addon folder(absolute path)
+        @type root: str
+        @param url_info: a (repo_type, url) tuple, which contains the url and
+                         the corresponding repository type (currently supporting: git, svn, hg)
+        @type url_info: tuple
+        @param folder_name: the addon folder name
+        @type folder_name: str
+        @param protected: a protected addon can't be modified
+        @type protected: bool
+        @param name: the addon's name (just for recognition)
+        @type name: str
+        """
+        
         #note difference between self._root and self.url_info assignments
         #in the second case the property function _set_url_info is called
         
@@ -78,7 +80,7 @@ class Addon(object):
                 raise Error.AddonRootError()
 
             if (url_info) or (folder_name):
-                self._root = os.path.expanduser(root)   #can't be changed for now
+                self._root = os.path.expanduser(root)
                 self.name = name                       
                 self.url_info = url_info
                 
@@ -112,9 +114,14 @@ class Addon(object):
     
     
     def _remove_tree(self, file):
-        """support function to delete files on the harddisk, check if the deletions happen in the root folder. 
-        We dont allow to manipulte folders outside of the addon folder
-        This function can remove files, links as well."""
+        """
+        A little support function to delete directories/files/links.
+        Deleting files is only possible within the addon root folder.
+        
+        returns True, if everything worked. None otherwise
+        
+        OSError is handled
+        """
         try:
             try:
                 #is it a subfolder/subfile in the addon root ?
@@ -125,11 +132,15 @@ class Addon(object):
                         shutil.rmtree(file)
                 else:
                     raise Error.CommonRemoveTreeError(self.root, file)
+                
+                return True
             
             except OSError as e:
-                raise Error.CommonOSError(e.strerror, e.filename)
+                raise Error.CommonOSError(e)
+            
             except Error.CommonRemoveTreeError as e:
                 print(e)
+                
         except Error.CommonOSError as e:
             print(e)
         
@@ -137,10 +148,16 @@ class Addon(object):
     
     #TODO maybe add some error, that says if the repo didnt exists, or access denied, etc.. -> AddonRepository[...]Error
     #and use the subprocesss exit status
-    def clone(self, stderr=None, stdout=None): #stderr=subprocess.STDOUT, stdout=subprocess.PIPE
-        """Clones the repo to a local folder."""
+    def clone(self): #stderr=subprocess.STDOUT, stdout=subprocess.PIPE
+        """Clones the given remote repository to a local folder."""
+        stderr=None
+        stdout=None
         try:
             try:
+                #check if we even have url_info given
+                if not self.url_info:
+                    raise Error.AddonUrlError(self)
+                
                 #only prevent cloning if the addon_folder already exists and is protected!
                 if os.path.exists(self.home):
                     if self.protected:
@@ -157,37 +174,44 @@ class Addon(object):
                 else:
                     #this should never every happen, since the _set_url_info is checking the repo_type already !
                     raise Error.AddonRepositoryTypeError(self, self.url_info[0], self.__class__._supported_repository_types)
+                
+                return True
+                
             except subprocess.CalledProcessError as e:
                 print(e)
                 raise Error.AddonCloneError(self, "subprocess returned non zero exit status")
+            
+            except Error.AddonUrlError as e:
+                print(e)
+                raise Error.AddonCloneError(self, "no url given")
+            
             except Error.AddonRepositoryTypeError as e:
                 print(e)
                 raise Error.AddonCloneError(self, "invalid repository type used")
+            
             except Error.AddonProtectedError as e:
                 print(e)
                 raise Error.AddonCloneError(self, "addon folder already exists and is protected")
+            
         except Error.AddonCloneError as e:
             print(e)
             
-    
-    #TODO add protected support
-    #check if adoon folder and/or repo folder exists        
-    #TODO add protected support
-    #something with the errors aint working at all ...
-    def update(self, stderr=None, stdout=None): #stderr=subprocess.STDOUT, stdout=subprocess.PIPE
-        """Updates an existing repo."""
-        
+    def update(self): #stderr=subprocess.STDOUT, stdout=subprocess.PIPE
+        """Updates the repository in an existing addon folder."""
+        stderr=None
+        stdout=None
         try:
-            try:
-                #check if its protected
-                if self.protected:
-                    raise Error.AddonProtectedError(self)
-                
-                #check for the repo folder exists
-                if not os.path.exists(self.repo_folder):
-                    raise Error.AddonRepositoryFolderError(self)
-                
+            try:               
                 try:
+                    #check if its protected
+                    if self.protected:
+                        raise Error.AddonProtectedError(self)
+                    
+                    #check for the repo folder exists
+                    if not os.path.exists(self.repo_folder):
+                        raise Error.AddonRepositoryFolderError(self)
+                    
+                    #git, hg need to be in the home folder in order to work !                                        
                     os.chdir(self.home)
                     if self.url_info[0] == "git":
                         subprocess.call(["git", "pull"], stderr=stderr, stdout=stdout)
@@ -200,25 +224,30 @@ class Addon(object):
                         #this should never every happen, since the _set_url_info is checking the repo_type already !
                         raise Error.AddonRepositoryTypeError(self, self.url_info[0], self.__class__._supported_repository_types)
                 
+                    return True
+                
                 except OSError as e:
-                    raise Error.CommonOSError(e.strerror, e.filename)
+                    raise Error.CommonOSError(e)
+                
                 except Error.AddonRepositoryFolderError as e:
                     print(e)
                     raise Error.AddonUpdateError(self, "repository folder missing")
+                
                 except subprocess.CalledProcessError as e:
                     print(e)
                     raise Error.AddonUpdateError(self, "subprocess returned non zero exit status")
+                
                 except Error.AddonRepositoryTypeError as e:
                     print(e)
                     raise Error.AddonUpdateError(self, "invalid repository type used")
+                
                 except Error.AddonProtectedError as e:
                     print(e)
                     raise Error.AddonUpdateError(self, "addon folder already exists and is protected")
                     
             except Error.CommonOSError as e:
-                raise Error.AddonUpdateError(self, "an OSError occurred")
-            except Error.AddonUpdateError as e:
                 print(e)
+                raise Error.AddonUpdateError(self, "an OSError occurred")
             
         except Error.AddonUpdateError as e:
             print(e)
@@ -233,8 +262,9 @@ class Addon(object):
             if name == None or type(name) == str:
                 self._name = name
             else:
-                raise TypeError("TypeError=_set_name")
-        except TypeError as e:
+                raise Error.CommonTypeError("Addon name needs to be a string.")
+            
+        except Error.CommonTypeError as e:
             print(e)
         
     def _get_name(self):
@@ -259,11 +289,9 @@ class Addon(object):
                 else:
                     raise Error.AddonRepositoryTypeError(self, url_info[0], self.__class__._supported_repository_types)
             else:
-                #TODO add smart parameter to TypeError() - like expecting a 2er tuple in _set_url_info
-                raise TypeError("TypeError=_set_url_info")
-        except TypeError as e:
-            print(e)
-        except Error.AddonRepositoryTypeError as e:
+                raise Error.CommonTypeError("url_info needs to be a tuple with length two or None.")
+            
+        except (Error.AddonRepositoryTypeError, Error.CommonTypeError) as e:
             print(e)
         
     def _get_url_info(self):
@@ -276,8 +304,9 @@ class Addon(object):
             if type(folder_name) == str:
                 self._folder_name = folder_name
             else:
-                raise TypeError("TypeError=_set_folder_name")
-        except TypeError as e:
+                raise Error.CommonTypeError("addon folder name needs to be a string.")
+            
+        except Error.CommonTypeError as e:
             print(e)
         
     def _get_folder_name(self):
@@ -301,19 +330,42 @@ class Addon(object):
                 else:
                     self._protected = True
             else:
-                raise TypeError("TypeError=_set_protected")
-        except TypeError as e:
+                raise Error.CommonTypeError("protected needs to be True or False.")
+            
+        except Error.CommonTypeError as e:
             print(e)
     
     #'virtual' repo_folder
     def _get_repo_folder(self):
         return os.path.join(self.home, "." + self.url_info[0])
     
-    
+    #'virtual' toc_file
+    def _get_toc_file(self):
+        """
+        Returns the name (without the .toc ending) of the first *.toc file found in the home folder. 
+        None, if there was no *.toc file found.
+        The name of this file and the folder_name have to match.
+        Otherwise the World of Warcraft client won't recognize it as a valid addon.
+        
+        Currently a valid name only contains the following characters [A-Z0-9a-z._-]
+        """
+        try:
+            try:
+                #currently returns the first toc file found. There shouldn't be more then one anyway !
+                for line in os.listdir(self.home):
+                    a = re.match("^([A-Z0-9a-z._-]+).toc$", line)
+                    if a:
+                        return a.group(1)
+                            
+            except OSError as e:
+                raise Error.CommonOSError(e)
+
+        except Error.CommonOSError as e:
+            print(e)
+
     #'virtual' config_file
     #TODO maybe make it work for more then just the .pkgmeta file, but for now that's good enough
     def _get_config_file(self):
-        """Can also be used to check if config_file exists, if the function returns None, it doesn't"""
         file = os.path.join(self.home, self.__class__._config_file)
         if os.path.exists(file) and os.path.isfile(file):
             return file
@@ -326,11 +378,13 @@ class Addon(object):
     def _get_config_file_parsed(self):
         return self._config_file_parsed
     
+    #seams to work
+    #better make this more resilient in the future, with a few proper errors
     #this only works for the .pgkmeta file (in the future we'll maybe have another function for general config files)
     def parse_pkgmeta_file(self):
         """read the .pkgmeta file and return a dict with all the information"""
-        if self.HasPkgFile():
-            tags = ["package-as", "externals", "ignore", "move-folders", "required-dependencies", "optional-dependencies", "manual-changelog", "license-output", "tools-used", "enable-nolib-creation"]
+        if self.config_file:
+            tags = self.__class__._config_file_tags
             dict_info = {}
             list_help = []
             cur_tag = None
@@ -348,13 +402,13 @@ class Addon(object):
                 if a:
                     dict_info[tags[tag_index]] = a.group(1)
                  
-            lines = Reader.Reader.get_instance().read_config(self.GetPkgFileDir())
+            lines = Reader.Reader.get_instance().read_config(self.config_file)
             
             for line in lines:
                 for tag in tags:
                     if not tag in dict_info:
                         dict_info[tag] = None
-                        pass
+                        
                     if line.startswith(tag):
                         # if the helper list exists add it to the info dictionary
                         if len(list_help) > 0:
@@ -419,74 +473,69 @@ class Addon(object):
             
             self._config_info = dict_info
             self._config_file_parsed = True
-    
-    def is_save_path(self):
-        #check if the tree we want to delete is in the root dir
-        pass
-    
-    
-    #TODO rename to _get_toc_file_name ?    
-    def find_toc_file(self):
-        """
-        Returns the name of the first .toc file found in the home folder.
-        The name of this file and the folder_name have to match in order to work ( so wow detects it as a valid addon)
-        """
-        try:
-            #currently returns the first toc file found. There shouldn't be more then one anyway !
-            for line in os.listdir(self.home):
-                a = re.match("^([A-Z0-9a-z._-]+).toc$", line)
-                if a:
-                    return a.group(1)
-            raise Error.AddonMissingTocFileError(self)
-        except OSError as e:
-            print(e)
-        except Error.AddonMissingTocFileError as e:
-            print(e)
-    
-    #pointless, just check if the "." + url_info[0] folder exitsts in the home folder of the addon
-    #pretty much replaced with _get_repo_folder()
-    def find_repository_folder(self):
-        """
-        Returns the found repo folder, otherwise None (if there is more then one or none)
-        """
-        try:
-            repo_folder = []
-            for file in os.listdir(self.home):
-                if file in [ "." + str(repo_type) for repo_type in self.__class__._supported_repository_types]:
-                    if file not in repo_folder:
-                        repo_folder.append(file)
-            if len(repo_folder) == 1:
-                return repo_folder[0]
-            else:
-                raise Error.AddonMultipleRepoFoldersError(self)
-        except (OSError, Error.AddonMultipleRepoFoldersError) as e:
-            print(e)
-           
-    
-    
-    #TODO check if it does what we want ;d
+            return True
+        
+        else:
+            #config file missing ! --> Error
+            pass
+        
     def clean_ignore(self, list_files):
-        """Delete folders and files mentioned by the .pkgmeta file"""
-        if not self.protected:
-            for file in list_files:
-                try:
-                    pass
-                except IOError as e:
-                    print("({})".format(e))
-    
-                if os.path.isfile(file):
-                    os.remove(os.path.join(self.GetAddonDir(), file))
-                elif os.path.exists(file):
-                    #shutil.rmtree(os.path.join(self.GetAddonDir(), file))
-                    pass
+        """
+        Delete folders and files mentioned by the config file.
+        
+        Returns True, if every file/folder mentioned was deleted. None otherwise
+        
+        """
+        try:
+            try:
+                if self.protected:
+                    raise Error.AddonProtectedError(self)
+                
+                #keep track of files we couldn't delete
+                list_not_deleted = []
+                
+                for file in list_files:
+                    #absolute path of the file
+                    absolute_file = os.path.join(self.home, file)
+                    if os.path.exists(absolute_file) and self._remove_tree(absolute_file):
+                        pass #good
+                    else:    
+                        list_not_deleted.append(file)
+                
+                if len(list_not_deleted) > 0:
+                    raise Error.AddonCleanIgnoreError(self, list_not_deleted)
+                
+                return True
+                
+            except OSError as e:
+                raise Error.CommonOSError(e)
+            
+            except (Error.AddonProtectedError, Error.AddonCleanIgnoreError) as e:
+                print(e)
+                
+        except Error.CommonOSError as e:
+            print(e)
 
-    #TODO check if it does what we want ;d
     def clean_repository_folder(self):
-        """Deletes the repo folder. like .git or .svn"""
-        if not self.protected:
-            if self.HasRepoFolder() and self.GetRepoDir().startswith(self.GetHome()):
-                #shutil.rmtree(self.GetRepoDir())
-                pass
+        """
+        Deletes the repository folder.
+        
+        Returns True, if the operation worked or the folder didn't exist in the first place.
+        
+        """
+        try:
+            if self.protected:
+                raise Error.AddonProtectedError(self)
+
+            if os.path.exists(self.repo_folder):
+                #OSError handled by _remove_tree()
+                if not self._remove_tree(self.repo_folder):
+                    return False
+             
+            return True
+        
+        except Error.AddonProtectedError as e:
+            print(e)
     
     #public attributes
     root = property(_get_root)
@@ -497,14 +546,10 @@ class Addon(object):
     protected = property(_get_protected, _set_protected)
     
     repo_folder = property(_get_repo_folder)
+    toc_file = property(_get_toc_file)
     
     config_file = property(_get_config_file)
     config_info = property(_get_config_info)
     config_file_parsed = property(_get_config_file_parsed)
 
 
-
-
-#a = Addon("/home/share/Development/AddOns/", ("git", "git://git.wowace.com/wow/pitbull4/mainline.git"))
-a = Addon("/home/share/Development/AddOns/", None, "test")
-#print(a.find_toc_file())

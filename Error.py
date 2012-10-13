@@ -33,6 +33,20 @@ import Addon
 #   -CommonError
 #        - ...
 
+
+#TODO maybe rework CommonTypeError to be more colorful and accept more args, like given_type, expected type, etc.
+# or even make it work both ways 
+
+#TODO add a  self.addon = addon to every error, this checks if its type Addon
+
+def color_list(l, color):
+    """
+    Input: list
+    returns a colorful list for Error messages.
+    """
+    #
+    pass
+
 def is_module(name):
     if name == "<module>":
         return name
@@ -62,10 +76,12 @@ class Error(Exception):
     
     def _set_addon(self, addon):
         try:
-            if type(addon) != Addon:
-                raise AddonTypeError(addon, type(addon), Addon)
+            if type(addon) != Addon.Addon:
+                raise CommonTypeError(given_type=type(addon), expected_type=Addon.Addon)
+            
             self._addon = addon
-        except AddonTypeError as e:
+            
+        except Error.CommonTypeError as e:
             print(e)
     
     def _get_addon(self):
@@ -88,6 +104,7 @@ class Error(Exception):
     msg = property(_get_msg, _set_msg)
     error_name = property(_get_error_name, _set_error_name)
 
+###CommonError
 
 class CommonError(Error):
     """basically just call the normal Error classes like TypeError, but make them look nicer."""
@@ -95,22 +112,24 @@ class CommonError(Error):
         Error.__init__(self, self.msg, self.error_name)
         
 
-#todo: not done 
+#Todo change, to accept lists of types as well
 class CommonTypeError(CommonError):
     
-    def __init__(self, msg, error_name):
+    def __init__(self, error, given_type=None, expected_type=None):
+        self.error_name = "CommonTypeError"
+        if given_type and expected_type:
+            self.msg = "Type '{blue}{0}{end}' used, was expecting '{blue}{1}{end}'.".format(given_type, expected_type, **Message.Color.colors)
+        else:
+            self.msg = "'{0}'.".format(error, **Message.Color.colors)
         CommonError.__init__(self, self.msg, self.error_name)
-
      
 class CommonOSError(CommonError):
     
-    def __init__(self, str_error, file_name):
+    def __init__(self, error):
         self.error_name = "CommonOSError"
-        self.msg = "{0}: '{blue}{1}{end}'.".format(str_error, file_name, **Message.Color.colors)
+        self.msg = "{0}: '{blue}{1}{end}'.".format(error.strerror, error.filename, **Message.Color.colors)
         CommonError.__init__(self, self.msg, self.error_name)
         
-
-
 
 class CommonRemoveTreeError(CommonError):
     
@@ -120,7 +139,7 @@ class CommonRemoveTreeError(CommonError):
         CommonError.__init__(self, self.msg, self.error_name)
         
        
-        
+###AddonError        
 
 class AddonError(Error):
     
@@ -146,6 +165,7 @@ class AddonRootError(AddonError):
         self.msg = "No root folder given for addon.".format(**Message.Color.colors)
         AddonError.__init__(self, self.msg, self.error_name)
 
+
 class AddonInitError(AddonError):
 
     def __init__(self):
@@ -153,11 +173,20 @@ class AddonInitError(AddonError):
         self.msg = "Addon initialization failed. Provide at least a (repo_type, url) tuple or an addon_folder.".format(**Message.Color.colors)
         AddonError.__init__(self, self.msg, self.error_name)
 
+
 class AddonProtectedError(AddonError):
 
     def __init__(self, addon):
         self.error_name = "AddonProtectedError"
         self.msg = "Addon '{blue}{0}{end}' is protected and therefore can not be modified in any way (clone, update, clear_ignore, clear_repo)".format(addon.name, **Message.Color.colors)
+        AddonError.__init__(self, self.msg, self.error_name)
+
+
+class AddonUrlError(AddonError):
+
+    def __init__(self, addon):
+        self.error_name = "AddonUrlError"
+        self.msg = "No url given for addon '{blue}{0}{end}'.".format(addon.name, **Message.Color.colors)
         AddonError.__init__(self, self.msg, self.error_name)
 
 
@@ -181,19 +210,33 @@ class AddonCloneError(AddonError):
 
     def __init__(self, addon, reason):
         self.error_name = "AddonCloneError"
-        self.msg = "Cloning from repository '{blue}{0}{end}' ({purple}{1}{end}) failed for addon '{blue}{2}{end}' ({purple}{3}{end}).".format(addon.url_info[1], addon.url_info[0], addon.name, reason, **Message.Color.colors)
+        if addon.url_info:
+            self.msg = "Cloning from repository '{blue}{0}{end}' ({purple}{1}{end}) failed for addon '{blue}{2}{end}' ({purple}{3}{end}).".format(addon.url_info[1], addon.url_info[0], addon.name, reason, **Message.Color.colors)
+        else:
+            self.msg = "Cloning from repository '{blue}{0}{end}' ({purple}{1}{end}) failed for addon '{blue}{2}{end}' ({purple}{3}{end}).".format("None", "None", addon.name, reason, **Message.Color.colors)
         AddonError.__init__(self, self.msg, self.error_name)
+
 
 class AddonUpdateError(AddonError):
 
     def __init__(self, addon, reason):
         self.error_name = "AddonUpdateError"
-        self.msg = "Updating addon '{blue}{0}{end}' ({purple}{1}{end}) failed.".format(addon.name, reason, **Message.Color.colors)
+        self.msg = "Updating addon '{blue}{0}{end}' failed ({purple}{1}{end}).".format(addon.name, reason, **Message.Color.colors)
+        AddonError.__init__(self, self.msg, self.error_name)
+
+
+class AddonCleanIgnoreError(AddonError):
+
+    def __init__(self, addon, list_files):
+        self.error_name = "AddonCleanIgnoreError"
+        self.msg = "The file(s) '{blue}{0}{end}' could not be deleted for addon '{blue}{1}{end}'.".format(list_files, addon.name, **Message.Color.colors)
         AddonError.__init__(self, self.msg, self.error_name)
 
 
 
 #TODO !
+#raise when the addon folder doesn't exist, but someone tries to access it.
+#quetionable if this is even needed.
 class AddonHomelessError(AddonError):
        
     def __init__(self, addon, reason):
@@ -201,29 +244,21 @@ class AddonHomelessError(AddonError):
         self.msg = "Updating addon '{blue}{0}{end}' ({1}).".format(addon.name, reason, **Message.Color.colors)
         AddonError.__init__(self, self.msg, self.error_name)
 
-#TODO
-class AddonTocFileError(AddonError):
-
-    def __init__(self, addon, reason):
-        self.error_name = "AddonTocFileError"
-        self.msg = "Updating addon '{blue}{0}{end}' ({1}).".format(addon.name, reason, **Message.Color.colors)
-        AddonError.__init__(self, self.msg, self.error_name)
 
 
 
 
-#TODO addon something like for addon (name)
-class AddonTypeError(AddonError):
+
+
+
+###AddonListError  
+
+class AddonListRootError(AddonListError):
     
-    def __init__(self, given_type, expected_type):
-        #self.addon = addon #TODO piss, does this work so ?
-        self.error_name = "AddonTypeError"
-        self.msg = "Type '{blue}{0}{end}' used, was expecting '{blue}{1}{end}'.".format(given_type, expected_type, **Message.Color.colors)
-        AddonError.__init__(self, self.msg, self.error_name)
-
-
-
-
+    def __init__(self):
+        self.error_name = "AddonListRootError"
+        self.msg = "No root folder given for addon list.".format(**Message.Color.colors)
+        AddonListError.__init__(self, self.msg, self.error_name)
 
 
 
@@ -235,7 +270,8 @@ class AddonListExtendError(AddonListError):
 
 class AddonListRemoveError(AddonListError):
     pass
-    
+
+#??    
 class InvalidLineInConfigFileError(AddonListError):
     
     def __init__(self, file, line):
