@@ -20,6 +20,9 @@ You should have received a copy of the GNU General Public License
 along with sau.  If not, see <http://www.gnu.org/licenses/>.
 """
 
+#import Error
+
+#TODO replace Errors with error classes from Error.py
 
 def chomp(s, c=None):
     """Removes leading and trailing chars of a string."""
@@ -52,9 +55,11 @@ class Reader(object):
                     #ignore empty lines
                     if not line == "":
                         list_line.append(line)
+                        
             #add it to class dict of read files
             self.__class__._dict_read_files[file] = list_line
             return list_line
+        
         except IOError as e:
             print(e)
     
