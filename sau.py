@@ -6,44 +6,32 @@ __author__ = "Share"
 __email__  = "shaana@student.ethz.ch"
 __license__= """
 Copyright (c) 2008-2012 Share <shaana@student.ethz.ch>
- 
-This program is free software; you can redistribute it and/or
-modify it under the terms of the GNU General Public License as
-published by the Free Software Foundation; either version 3 of the
-License, or (at your option) any later version.
+This file is part of sau.
 
-This program is distributed in the hope that it will be useful, but
-WITHOUT ANY WARRANTY; without even the implied warranty of
-MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
-General Public License for more details.
+sau is free software: you can redistribute it and/or modify
+it under the terms of the GNU General Public License as published by
+the Free Software Foundation, either version 3 of the License, or
+(at your option) any later version.
+
+sau is distributed in the hope that it will be useful,
+but WITHOUT ANY WARRANTY; without even the implied warranty of
+MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+GNU General Public License for more details.
 
 You should have received a copy of the GNU General Public License
-along with this program; if not, write to the Free Software
-Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA 02111-1307
-USA
-
+along with sau.  If not, see <http://www.gnu.org/licenses/>.
 """
 
 import os
 import sys
 from optparse import OptionParser
 
-from Addon import Addon
-from AddonList import AddonList
 
-from Error import *
-from bcolors import bcolors
+import Addon
+import AddonList
+
+import Error
     
-
-class Error_msg(object):
-
-    def Print(self, message):
-        print("Error: {0}".format(message))
-        
-    def ReadFile_LineError(self, file_name, line):
-        print(bcolors.RED + "Error: " + bcolors.END + "Invalid line in file \'{0}\', line {1}".format(bcolors.YELLOW + file_name + bcolors.END, bcolors.YELLOW + str(line) + bcolors.END))
-    
-error = Error_msg()   
 
 
 def main():
@@ -105,7 +93,7 @@ def ReadFile(filename):
                     list_line.append(line)
         return list_line
     except IOError as e:
-        error.Print("({})".format(e))
+        print("({})".format(e))
 
 
 if __name__ == "__main__":

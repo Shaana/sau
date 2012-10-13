@@ -1,5 +1,26 @@
 #!/usr/bin/env python
 
+__author__ = "Share"
+__email__  = "shaana@student.ethz.ch"
+__license__= """
+Copyright (c) 2008-2012 Share <shaana@student.ethz.ch>
+This file is part of sau.
+
+sau is free software: you can redistribute it and/or modify
+it under the terms of the GNU General Public License as published by
+the Free Software Foundation, either version 3 of the License, or
+(at your option) any later version.
+
+sau is distributed in the hope that it will be useful,
+but WITHOUT ANY WARRANTY; without even the implied warranty of
+MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+GNU General Public License for more details.
+
+You should have received a copy of the GNU General Public License
+along with sau.  If not, see <http://www.gnu.org/licenses/>.
+"""
+
+
 def chomp(s, c=None):
     """Removes leading and trailing chars of a string."""
     return s.lstrip(c).rstrip(c)
@@ -48,6 +69,6 @@ class Reader(object):
     
     get_instance = staticmethod(get_instance)
     
-    
+
 #r = Reader.get_instance()
 #print(r.read_config("/home/share/Development/ignore.list"))

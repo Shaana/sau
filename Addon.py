@@ -1,19 +1,48 @@
 #!/usr/bin/env python
 
+__author__ = "Share"
+__email__  = "shaana@student.ethz.ch"
+__license__= """
+Copyright (c) 2008-2012 Share <shaana@student.ethz.ch>
+This file is part of sau.
+
+sau is free software: you can redistribute it and/or modify
+it under the terms of the GNU General Public License as published by
+the Free Software Foundation, either version 3 of the License, or
+(at your option) any later version.
+
+sau is distributed in the hope that it will be useful,
+but WITHOUT ANY WARRANTY; without even the implied warranty of
+MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+GNU General Public License for more details.
+
+You should have received a copy of the GNU General Public License
+along with sau.  If not, see <http://www.gnu.org/licenses/>.
+"""
+
 import os
 import re
 import subprocess
 import shutil
+import traceback
 
-from Error import *
-from Reader import chomp, Reader
+import Error
+import Reader
+
+
+#TODO add threading support for cloning, with a global class variable to keep track of the cloning instances :D
+#like clone() ... do the threading and call renamed function _clone()
 
 #TODO add a find_repo_folder function
 #make smart TypeError() parameters or replace them with AddonTypeError(), so all error messages look the same
 #NOTE: use a try, except block in the sau.py main function catching AttributeError, in case someone tries to assign a value to a _getter only variable
-
+#TODO replace system errors with my own errors ! for better messages :)
 
 #TODO add function like get_repo_folder
+
+
+#OSError e.errno, e.filename, e.strerror
+
 
 class Addon(object):
     """
@@ -46,7 +75,7 @@ class Addon(object):
         
         try:
             if not root:
-                raise AddonRootError(self)
+                raise Error.AddonRootError()
 
             if (url_info) or (folder_name):
                 self._root = os.path.expanduser(root)   #can't be changed for now
@@ -70,26 +99,55 @@ class Addon(object):
                 #increment counter
                 self.__class__.num_addons += 1
             else:
-                raise AddonInitError()
+                raise Error.AddonInitError()
 
-        except AddonRootError as e:
+        except (Error.AddonRootError , Error.AddonInitError) as e:
             print(e)
-        except AddonInitError as e:
-                print(e)
+
     
     def __str__(self):
-        return("name: {}; home: {}; url: {} {}; folder: {}; protected: {}".format(self.name, self.home, self.repo_type, self.url, self.folder_name, self.protected))
+        #TODO rework
+        #return("name: {}; home: {}; url: {} {}; folder: {}; protected: {}".format(self.name, self.home, self.repo_type, self.url, self.folder_name, self.protected))
+        return self.name
     
     
-    #BIG TODO
-    #change to try: except: ... AddonCloneError, AddonUpdateError and
+    def _remove_tree(self, file):
+        """support function to delete files on the harddisk, check if the deletions happen in the root folder. 
+        We dont allow to manipulte folders outside of the addon folder
+        This function can remove files, links as well."""
+        try:
+            try:
+                #is it a subfolder/subfile in the addon root ?
+                if file.startswith(self.root):
+                    if os.path.isfile(file):
+                        os.remove(file)
+                    else:
+                        shutil.rmtree(file)
+                else:
+                    raise Error.CommonRemoveTreeError(self.root, file)
+            
+            except OSError as e:
+                raise Error.CommonOSError(e.strerror, e.filename)
+            except Error.CommonRemoveTreeError as e:
+                print(e)
+        except Error.CommonOSError as e:
+            print(e)
+        
+
+    
+    #TODO maybe add some error, that says if the repo didnt exists, or access denied, etc.. -> AddonRepository[...]Error
     #and use the subprocesss exit status
-    #TODO add protected support
-    #check if adoon folder and/or repo folder exists
-    def clone(self, stderr=subprocess.STDOUT, stdout=subprocess.PIPE):
+    def clone(self, stderr=None, stdout=None): #stderr=subprocess.STDOUT, stdout=subprocess.PIPE
         """Clones the repo to a local folder."""
         try:
             try:
+                #only prevent cloning if the addon_folder already exists and is protected!
+                if os.path.exists(self.home):
+                    if self.protected:
+                        raise Error.AddonProtectedError(self)
+                    else:
+                        self._remove_tree(self.home)
+                    
                 if self.url_info[0] == "git":
                     subprocess.call(["git", "clone", self.url_info[1], self.home], stderr=stderr, stdout=stdout)
                 elif self.url_info[0] == "svn":
@@ -98,50 +156,71 @@ class Addon(object):
                     subprocess.call(["hg", "clone", self.url_info[1], self.home], stderr=stderr, stdout=stdout)
                 else:
                     #this should never every happen, since the _set_url_info is checking the repo_type already !
-                    raise AddonNotSupportedRepoTypeError(self.url_info[0], self.__class__._supported_repository_types)
+                    raise Error.AddonRepositoryTypeError(self, self.url_info[0], self.__class__._supported_repository_types)
             except subprocess.CalledProcessError as e:
                 print(e)
-                raise AddonCloneError(self)
-            except AddonNotSupportedRepoTypeError as e:
+                raise Error.AddonCloneError(self, "subprocess returned non zero exit status")
+            except Error.AddonRepositoryTypeError as e:
                 print(e)
-                raise AddonCloneError(self)
-        except AddonCloneError as e:
+                raise Error.AddonCloneError(self, "invalid repository type used")
+            except Error.AddonProtectedError as e:
+                print(e)
+                raise Error.AddonCloneError(self, "addon folder already exists and is protected")
+        except Error.AddonCloneError as e:
             print(e)
             
-            
-    #TODO add protected support 
-    def update(self, stderr=subprocess.STDOUT, stdout=subprocess.PIPE):
+    
+    #TODO add protected support
+    #check if adoon folder and/or repo folder exists        
+    #TODO add protected support
+    #something with the errors aint working at all ...
+    def update(self, stderr=None, stdout=None): #stderr=subprocess.STDOUT, stdout=subprocess.PIPE
         """Updates an existing repo."""
+        
         try:
-            if self.protected:
-                raise AddonProtectedError(self)
-            
             try:
-                os.chdir(self.home)
-                if self.url_info[0] == "git":
-                    subprocess.call(["git", "pull"], stderr=stderr, stdout=stdout)
-                elif self.url_info[0] == "svn":
-                    subprocess.call(["svn", "update", self.home], stderr=stderr, stdout=stdout)
-                elif self.url_info[0] == "hg":
-                    subprocess.call(["hg", "pull"], stderr=stderr, stdout=stdout)
-                    subprocess.call(["hg", "update"], stderr=stderr, stdout=stdout)
-                else:
-                    #this should never every happen, since the _set_url_info is checking the repo_type already !
-                    raise AddonNotSupportedRepoTypeError(self.url_info[0], self.__class__._supported_repository_types)
+                #check if its protected
+                if self.protected:
+                    raise Error.AddonProtectedError(self)
+                
+                #check for the repo folder exists
+                if not os.path.exists(self.repo_folder):
+                    raise Error.AddonRepositoryFolderError(self)
+                
+                try:
+                    os.chdir(self.home)
+                    if self.url_info[0] == "git":
+                        subprocess.call(["git", "pull"], stderr=stderr, stdout=stdout)
+                    elif self.url_info[0] == "svn":
+                        subprocess.call(["svn", "update", self.home], stderr=stderr, stdout=stdout)
+                    elif self.url_info[0] == "hg":
+                        subprocess.call(["hg", "pull"], stderr=stderr, stdout=stdout)
+                        subprocess.call(["hg", "update"], stderr=stderr, stdout=stdout)
+                    else:
+                        #this should never every happen, since the _set_url_info is checking the repo_type already !
+                        raise Error.AddonRepositoryTypeError(self, self.url_info[0], self.__class__._supported_repository_types)
+                
+                except OSError as e:
+                    raise Error.CommonOSError(e.strerror, e.filename)
+                except Error.AddonRepositoryFolderError as e:
+                    print(e)
+                    raise Error.AddonUpdateError(self, "repository folder missing")
+                except subprocess.CalledProcessError as e:
+                    print(e)
+                    raise Error.AddonUpdateError(self, "subprocess returned non zero exit status")
+                except Error.AddonRepositoryTypeError as e:
+                    print(e)
+                    raise Error.AddonUpdateError(self, "invalid repository type used")
+                except Error.AddonProtectedError as e:
+                    print(e)
+                    raise Error.AddonUpdateError(self, "addon folder already exists and is protected")
+                    
+            except Error.CommonOSError as e:
+                raise Error.AddonUpdateError(self, "an OSError occurred")
+            except Error.AddonUpdateError as e:
+                print(e)
             
-            except OSError as e:
-                print(e)
-                raise AddonUpdateError(self)
-            except subprocess.CalledProcessError as e:
-                print(e)
-                raise AddonUpdateError(self)
-            except AddonNotSupportedRepoTypeError as e:
-                print(e)
-                raise AddonUpdateError(self)
-            
-        except AddonProtectedError as e:
-            print(e)
-        except AddonUpdateError as e:
+        except Error.AddonUpdateError as e:
             print(e)
     
     #_root
@@ -159,7 +238,14 @@ class Addon(object):
             print(e)
         
     def _get_name(self):
-        return self._name
+        if self._name:
+            return self._name
+        elif self.url_info:
+            return "u:" + self.url_info[1]
+        elif self.folder_name:
+            return "f:" +self.folder_name
+        else:
+            return "Unknown"
         
     #_url_info, (repo_type, url)
     def _set_url_info(self, url_info):
@@ -171,13 +257,13 @@ class Addon(object):
                 if url_info[0] in self.__class__._supported_repository_types:
                     self._url_info = url_info
                 else:
-                    raise AddonNotSupportedRepoTypeError(self, url_info[0], self.__class__._supported_repository_types)
+                    raise Error.AddonRepositoryTypeError(self, url_info[0], self.__class__._supported_repository_types)
             else:
                 #TODO add smart parameter to TypeError() - like expecting a 2er tuple in _set_url_info
                 raise TypeError("TypeError=_set_url_info")
         except TypeError as e:
             print(e)
-        except AddonNotSupportedRepoTypeError as e:
+        except Error.AddonRepositoryTypeError as e:
             print(e)
         
     def _get_url_info(self):
@@ -218,7 +304,12 @@ class Addon(object):
                 raise TypeError("TypeError=_set_protected")
         except TypeError as e:
             print(e)
-  
+    
+    #'virtual' repo_folder
+    def _get_repo_folder(self):
+        return os.path.join(self.home, "." + self.url_info[0])
+    
+    
     #'virtual' config_file
     #TODO maybe make it work for more then just the .pkgmeta file, but for now that's good enough
     def _get_config_file(self):
@@ -257,7 +348,7 @@ class Addon(object):
                 if a:
                     dict_info[tags[tag_index]] = a.group(1)
                  
-            lines = Reader.get_instance().read_config(self.GetPkgFileDir())
+            lines = Reader.Reader.get_instance().read_config(self.GetPkgFileDir())
             
             for line in lines:
                 for tag in tags:
@@ -329,6 +420,10 @@ class Addon(object):
             self._config_info = dict_info
             self._config_file_parsed = True
     
+    def is_save_path(self):
+        #check if the tree we want to delete is in the root dir
+        pass
+    
     
     #TODO rename to _get_toc_file_name ?    
     def find_toc_file(self):
@@ -342,12 +437,14 @@ class Addon(object):
                 a = re.match("^([A-Z0-9a-z._-]+).toc$", line)
                 if a:
                     return a.group(1)
-            raise AddonMissingTocFileError(self)
+            raise Error.AddonMissingTocFileError(self)
         except OSError as e:
             print(e)
-        except AddonMissingTocFileError as e:
+        except Error.AddonMissingTocFileError as e:
             print(e)
     
+    #pointless, just check if the "." + url_info[0] folder exitsts in the home folder of the addon
+    #pretty much replaced with _get_repo_folder()
     def find_repository_folder(self):
         """
         Returns the found repo folder, otherwise None (if there is more then one or none)
@@ -361,12 +458,10 @@ class Addon(object):
             if len(repo_folder) == 1:
                 return repo_folder[0]
             else:
-                raise AddonMultipleRepoFoldersError(self)
-        except OSError as e:
+                raise Error.AddonMultipleRepoFoldersError(self)
+        except (OSError, Error.AddonMultipleRepoFoldersError) as e:
             print(e)
-        except AddonMultipleRepoFoldersError as e:
-            print(e)
-            
+           
     
     
     #TODO check if it does what we want ;d
@@ -393,13 +488,16 @@ class Addon(object):
                 #shutil.rmtree(self.GetRepoDir())
                 pass
     
+    #public attributes
     root = property(_get_root)
     url_info = property(_get_url_info, _set_url_info)
     name = property(_get_name, _set_name)
     folder_name = property(_get_folder_name, _set_folder_name)
     home = property(_get_home)  
     protected = property(_get_protected, _set_protected)
-
+    
+    repo_folder = property(_get_repo_folder)
+    
     config_file = property(_get_config_file)
     config_info = property(_get_config_info)
     config_file_parsed = property(_get_config_file_parsed)
@@ -409,4 +507,4 @@ class Addon(object):
 
 #a = Addon("/home/share/Development/AddOns/", ("git", "git://git.wowace.com/wow/pitbull4/mainline.git"))
 a = Addon("/home/share/Development/AddOns/", None, "test")
-print(a.find_toc_file())
+#print(a.find_toc_file())
