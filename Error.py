@@ -55,7 +55,7 @@ def is_module(name):
 
 class Error(Exception):
     
-    _debug = False
+    _debug = True
     
     def __init__(self, msg, error_name):
         self.error_name = error_name
@@ -77,12 +77,14 @@ class Error(Exception):
     def _set_addon(self, addon):
         try:
             if type(addon) != Addon.Addon:
-                raise CommonTypeError(given_type=type(addon), expected_type=Addon.Addon)
+                self._addon = None
+                raise CommonTypeError(None, type(addon), Addon.Addon)
             
             self._addon = addon
             
-        except Error.CommonTypeError as e:
+        except CommonTypeError as e:
             print(e)
+            assert type(addon) == Addon.Addon
     
     def _get_addon(self):
         return self._addon
@@ -261,15 +263,44 @@ class AddonListRootError(AddonListError):
         AddonListError.__init__(self, self.msg, self.error_name)
 
 
+class AddonListNameError(AddonListError):
+    
+    def __init__(self):
+        self.error_name = "AddonListNameError"
+        self.msg = "No name given for addon list.".format(**Message.Color.colors)
+        AddonListError.__init__(self, self.msg, self.error_name)
+
+
+class AddonListColisionError(AddonListError):
+    
+    def __init__(self, addon_list, addon):
+        #use self.name to specify the list
+        self.addon = addon
+        self.error_name = "AddonListColisionError"
+        self.msg = "it already exists an addon '{0}' with the same url or folder name in the addon_list '{1}'".format(self.addon.name, addon_list.name, **Message.Color.colors)
+        AddonListError.__init__(self, self.msg, self.error_name)
+
+
 
 class AddonListAddError(AddonListError):
     pass
 
-class AddonListExtendError(AddonListError):
-    pass
-
 class AddonListRemoveError(AddonListError):
-    pass
+    
+    def __init__(self, addon_list, addon):
+        self.addon = addon
+        self.error_name = "AddonListRemoveError"
+        self.msg = "Could not remove addon '{blue}{0}{end}', because it's not in the addon_list '{blue}{1}{end}'".format(self.addon.name, addon_list.name, **Message.Color.colors)
+        AddonListError.__init__(self, self.msg, self.error_name)
+
+
+#TODO, change to show the first few elements of the wrong list ?
+class AddonListExtendError(AddonListError):
+
+    def __init__(self, addon_list, list_addons):
+        self.error_name = "AddonListExtendError"
+        self.msg = "invalid list_extend given for addon_list '{blue}{0}{end}'".format(addon_list.name, **Message.Color.colors)
+        AddonListError.__init__(self, self.msg, self.error_name)
 
 #??    
 class InvalidLineInConfigFileError(AddonListError):

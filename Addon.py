@@ -32,6 +32,7 @@ import Reader
 #like clone() ... do the threading and call renamed function _clone()
 
 #TODO rework parse_pkgmeta_file()
+#TODO add os.path.userexpand() to urls, files, etc.
 
 class Addon(object):
     """
@@ -112,6 +113,71 @@ class Addon(object):
         #return("name: {}; home: {}; url: {} {}; folder: {}; protected: {}".format(self.name, self.home, self.repo_type, self.url, self.folder_name, self.protected))
         return self.name
     
+    #todo not done yet, change
+    #for two addons to be consider equal they one url needs to be part of the other one
+    #and at least domain + first folder
+    def __eq__(self, other):
+        """
+        
+        Addons are considered to be the same if at least the domain name 
+        and the first folder match
+        
+            svn://svn.wowace.com/wow/ace3/mainline/trunk/AceAddon-3.0
+            http://svn.wowace.com/wow/ace3/mainline/trunk
+        
+        are considered the same, because both match svn.wowace.com/wow
+        
+        """
+        #svn://svn.wowace.com/wow/ace3/mainline/trunk/AceAddon-3.0
+        #http://svn.wowace.com/wow/ace3/mainline/trunk
+        #in that case they are considered the same
+        # svn.wowace.com/wow/ace3/mainline/trunk matches
+        
+        def strip_url(url):
+            """removes the protocol from a url, f.e 'http://'."""
+            if not url:
+                return
+            return url[url.find("://") + 3: ]
+
+        def cut_url(url):
+            """a bit confusion, because it means the domain and the first folder."""
+            #Error only catching first letter of the first word
+            match = re.match("^.+?://(.+?/[A-Z0-9a-z.~_-]+)/?.*?$", url)
+            if match:
+                return match.group(1)
+        
+          
+            
+        url_1, url_2 = self.url_info[1], None
+        
+        if type(other) == Addon:
+            url_2 = other.url_info[1]
+        elif type(other) == str:
+            url_2 = other
+        else:
+            pass # raise error
+        
+        url_1_strip = strip_url(url_1)
+        url_2_strip = strip_url(url_2)
+        
+        url_1_cut = cut_url(url_1)
+        url_2_cut = cut_url(url_2)
+        
+        print(url_1_strip,"___", url_2_strip)
+        print(url_1_cut,"___", url_2_cut)
+        
+        #check if domain and first folder are the same    
+        if url_1_cut == url_2_cut:
+            if url_1_strip.startswith(url_2_strip) or url_2_strip.startswith(url_1_strip):
+                return True
+            
+        #if the url comparison fails, check if the have the same folder_name
+
+    def __ne__(self, other):
+        if not self.__eq__(other):
+            return True
+        else:
+            return False
     
     def _remove_tree(self, file):
         """
