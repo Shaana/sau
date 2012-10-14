@@ -24,6 +24,7 @@ import os
 import re
 import subprocess
 import shutil
+import threading
 
 import Error
 import Reader
@@ -46,6 +47,11 @@ class Addon(object):
     """
     #using properties, access variables via self#required for TempFolder_i.home, self.name, self.url, etc.
     #counts the number of addon instances, required for TempFolder_i
+    
+    
+    #TODO yet to be implemented
+    _enable_clone_threading = False
+    
     num_addons = 0
     
     #currently supported repository types
@@ -118,6 +124,9 @@ class Addon(object):
     #and at least domain + first folder
     def __eq__(self, other):
         """
+        Addons are the same if the url is the same.
+        Note: folder_names are unique and cannot be None - we don't have to check for that.
+        It's only possible to compare two Addon objects.
         
         Addons are considered to be the same if at least the domain name 
         and the first folder match
@@ -128,11 +137,7 @@ class Addon(object):
         are considered the same, because both match svn.wowace.com/wow
         
         """
-        #svn://svn.wowace.com/wow/ace3/mainline/trunk/AceAddon-3.0
-        #http://svn.wowace.com/wow/ace3/mainline/trunk
-        #in that case they are considered the same
-        # svn.wowace.com/wow/ace3/mainline/trunk matches
-        
+
         def strip_url(url):
             """removes the protocol from a url, f.e 'http://'."""
             if not url:
@@ -146,17 +151,45 @@ class Addon(object):
             if match:
                 return match.group(1)
         
-          
+        def is_same_url(url_1, url_2):
+            """
+            urls are considered the same if at least the domain name and
+            the first folder match.
+            """
+            url_1_strip = strip_url(url_1)
+            url_2_strip = strip_url(url_2)
             
-        url_1, url_2 = self.url_info[1], None
+            url_1_cut = cut_url(url_1)
+            url_2_cut = cut_url(url_2)
+            
+            print(url_1_strip,"___", url_2_strip)
+            print(url_1_cut,"___", url_2_cut)
+            
+            if url_1_cut == url_2_cut:
+                if url_1_strip.startswith(url_2_strip) or url_2_strip.startswith(url_1_strip):
+                    return True
+          
+        #basic variables to compare    
+        url_1 = self.url_info[1]
+        url_2 = other.url_info[1]
+        folder_name_1 = self.folder_name
+        folder_name_2 = other.folder_name
         
-        if type(other) == Addon:
-            url_2 = other.url_info[1]
-        elif type(other) == str:
-            url_2 = other
-        else:
-            pass # raise error
+        print(url_1, "___", url_2)
+        print(folder_name_1, "___", folder_name_2)
+        #three things can happen
+        #either we get double url, or double folder_name and double both
+        if url_1 and url_2 and folder_name_1 and folder_name_2:
+            if is_same_url(url_1, url_2) and folder_name_1 == folder_name_2:
+                return True
+        elif url_1 and url_2:
+            if is_same_url(url_1, url_2):
+                return True
+        elif folder_name_1 and folder_name_2: #both None is not valid !
+            if folder_name_1 == folder_name_2:
+                return True
         
+        """
         url_1_strip = strip_url(url_1)
         url_2_strip = strip_url(url_2)
         
@@ -172,7 +205,8 @@ class Addon(object):
                 return True
             
         #if the url comparison fails, check if the have the same folder_name
-
+        """
+        
     def __ne__(self, other):
         if not self.__eq__(other):
             return True
