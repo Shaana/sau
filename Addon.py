@@ -24,7 +24,7 @@ import os
 import re
 import subprocess
 import shutil
-import threading
+#import threading
 
 import Error
 import Reader
@@ -119,93 +119,48 @@ class Addon(object):
         #return("name: {}; home: {}; url: {} {}; folder: {}; protected: {}".format(self.name, self.home, self.repo_type, self.url, self.folder_name, self.protected))
         return self.name
     
-    #todo not done yet, change
-    #for two addons to be consider equal they one url needs to be part of the other one
-    #and at least domain + first folder
+    #TODO test.
+    #TODO, get ride of enhance_url_info, it's just a stupied concept
     def __eq__(self, other):
         """
-        Addons are the same if the url is the same.
-        Note: folder_names are unique and cannot be None - we don't have to check for that.
+        Addons are considered the same if the repot_type and url are the same. (tailing '/' are stripped for comparison)
+        Or, if not two url_infos are given, we use the both folder_names and compare them.
+        
         It's only possible to compare two Addon objects.
         
-        Addons are considered to be the same if at least the domain name 
-        and the first folder match
-        
-            svn://svn.wowace.com/wow/ace3/mainline/trunk/AceAddon-3.0
-            http://svn.wowace.com/wow/ace3/mainline/trunk
-        
-        are considered the same, because both match svn.wowace.com/wow
-        
+        Note: If we both url_infos and both folder_names are given, we only use the url_info to compare them and ignore the folder_names.
+
         """
-
-        def strip_url(url):
-            """removes the protocol from a url, f.e 'http://'."""
-            if not url:
-                return
-            return url[url.find("://") + 3: ]
-
-        def cut_url(url):
-            """a bit confusion, because it means the domain and the first folder."""
-            #Error only catching first letter of the first word
-            match = re.match("^.+?://(.+?/[A-Z0-9a-z.~_-]+)/?.*?$", url)
-            if match:
-                return match.group(1)
         
-        def is_same_url(url_1, url_2):
-            """
-            urls are considered the same if at least the domain name and
-            the first folder match.
-            """
-            url_1_strip = strip_url(url_1)
-            url_2_strip = strip_url(url_2)
-            
-            url_1_cut = cut_url(url_1)
-            url_2_cut = cut_url(url_2)
-            
-            print(url_1_strip,"___", url_2_strip)
-            print(url_1_cut,"___", url_2_cut)
-            
-            if url_1_cut == url_2_cut:
-                if url_1_strip.startswith(url_2_strip) or url_2_strip.startswith(url_1_strip):
-                    return True
-          
-        #basic variables to compare    
-        url_1 = self.url_info[1]
-        url_2 = other.url_info[1]
+        #basic variables to compare  
+        repo_type_1 = None
+        repo_type_2 = None
+        url_1 = None
+        url_2 = None
         folder_name_1 = self.folder_name
         folder_name_2 = other.folder_name
-        
-        print(url_1, "___", url_2)
-        print(folder_name_1, "___", folder_name_2)
-        #three things can happen
-        #either we get double url, or double folder_name and double both
-        if url_1 and url_2 and folder_name_1 and folder_name_2:
-            if is_same_url(url_1, url_2) and folder_name_1 == folder_name_2:
+          
+        if self.url_info:
+            repo_type_1 = self.url_info[0]
+            url_1 = self.url_info[1].rstrip("/")
+    
+        if other.url_info:
+            repo_type_2 = other.url_info[0]
+            url_2 = other.url_info[1].rstrip("/")
+            
+        #DEBUG
+        #print(url_1, "___", url_2)
+        #print(repo_type_1, "___", repo_type_2)
+        #print(folder_name_1, "___", folder_name_2)
+
+        #if both url_infos and both folder_names are given, the folder_names DON'T have to match.
+        if url_1 and url_2:
+            if repo_type_1 == repo_type_2 and url_1 == url_2:
                 return True
-        elif url_1 and url_2:
-            if is_same_url(url_1, url_2):
-                return True
-        elif folder_name_1 and folder_name_2: #both None is not valid !
+        #if we don't have two url_infos, compare the folder_names
+        elif folder_name_1 and folder_name_2 and not (url_1 and url_2):
             if folder_name_1 == folder_name_2:
                 return True
-        
-        """
-        url_1_strip = strip_url(url_1)
-        url_2_strip = strip_url(url_2)
-        
-        url_1_cut = cut_url(url_1)
-        url_2_cut = cut_url(url_2)
-        
-        print(url_1_strip,"___", url_2_strip)
-        print(url_1_cut,"___", url_2_cut)
-        
-        #check if domain and first folder are the same    
-        if url_1_cut == url_2_cut:
-            if url_1_strip.startswith(url_2_strip) or url_2_strip.startswith(url_1_strip):
-                return True
-            
-        #if the url comparison fails, check if the have the same folder_name
-        """
         
     def __ne__(self, other):
         if not self.__eq__(other):
@@ -243,15 +198,16 @@ class Addon(object):
                 
         except Error.CommonOSError as e:
             print(e)
-        
-
     
+       
+    def clone(self, stderr=None, stdout=None):
+        #TODO add threading support here
+        self._clone(stderr, stdout)
+
     #TODO maybe add some error, that says if the repo didnt exists, or access denied, etc.. -> AddonRepository[...]Error
     #and use the subprocesss exit status
-    def clone(self): #stderr=subprocess.STDOUT, stdout=subprocess.PIPE
+    def _clone(self, stderr=None, stdout=None): #stderr=subprocess.STDOUT, stdout=subprocess.PIPE
         """Clones the given remote repository to a local folder."""
-        stderr=None
-        stdout=None
         try:
             try:
                 #check if we even have url_info given
@@ -295,11 +251,13 @@ class Addon(object):
             
         except Error.AddonCloneError as e:
             print(e)
-            
-    def update(self): #stderr=subprocess.STDOUT, stdout=subprocess.PIPE
+ 
+    def update(self, stderr=None, stdout=None):
+        #TODO add threading support here
+        self._update(stderr,stdout)
+      
+    def _update(self, stderr=None, stdout=None): #stderr=subprocess.STDOUT, stdout=subprocess.PIPE
         """Updates the repository in an existing addon folder."""
-        stderr=None
-        stdout=None
         try:
             try:               
                 try:
@@ -578,6 +536,30 @@ class Addon(object):
         else:
             #config file missing ! --> Error
             pass
+    
+    #Todo, error, text
+    #maybe add a check to see if the urls are the same ? --> error if not AddonEnhanceUrlError()
+    def enhance_url_info(self, other):
+        """
+        when there is two addons, that have the 'same' (according to check in AddonList) url
+        then the shorter url is usually the better one!
+        Since the addon will not be added to the AddonList due to colision.
+        It still might be smart to updated the addons (the one already in the list) url_info.
+        We asume that those urls are equal and just take the shorter one (after we striped the protocol).
+        """
+         
+        #check if both url_infos are different from None
+        if self.url_info and other.url_info:
+            assert self.url_info[0] == other.url_info[0]
+            #check which is the better (=shorter) one
+            if len(self.url_info[1][self.url_info[1].find("://") + 3: ]) > len(other.url_info[1][other.url_info[1].find("://") + 3: ]):
+                self.url_info = other.url_info
+            
+            return True
+            
+        else:
+            pass # --> Error    
+    
         
     def clean_ignore(self, list_files):
         """
@@ -630,6 +612,25 @@ class Addon(object):
             if os.path.exists(self.repo_folder):
                 #OSError handled by _remove_tree()
                 if not self._remove_tree(self.repo_folder):
+                    return False
+             
+            return True
+        
+        except Error.AddonProtectedError as e:
+            print(e)
+   
+    #Todo test        
+    def clean_home(self):
+        """
+        delete the whole addon folder for a clean new install :D
+        """
+        try:
+            if self.protected:
+                raise Error.AddonProtectedError(self)
+
+            if os.path.exists(self.home):
+                #OSError handled by _remove_tree()
+                if not self._remove_tree(self.home):
                     return False
              
             return True
