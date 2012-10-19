@@ -226,6 +226,13 @@ class AddonUpdateError(AddonError):
         self.msg = "Updating addon '{blue}{0}{end}' failed ({purple}{1}{end}).".format(addon.name, reason, **Message.Color.colors)
         AddonError.__init__(self, self.msg, self.error_name)
 
+class AddonExecuteError(AddonError):
+
+    def __init__(self, addon, reason):
+        self.error_name = "AddonExecuteError"
+        self.msg = "Executing addon '{blue}{0}{end}' failed ({purple}{1}{end}).".format(addon.name, reason, **Message.Color.colors)
+        AddonError.__init__(self, self.msg, self.error_name)
+
 
 class AddonCleanIgnoreError(AddonError):
 
@@ -277,7 +284,7 @@ class AddonListColisionError(AddonListError):
         #use self.name to specify the list
         self.addon = addon
         self.error_name = "AddonListColisionError"
-        self.msg = "it already exists an addon '{0}' with the same url or folder name in the addon_list '{1}'".format(self.addon.name, addon_list.name, **Message.Color.colors)
+        self.msg = "it already exists an addon '{0}' with the same url or folder name in the addon_list '{1}'. Continuing.".format(self.addon.name, addon_list.name, **Message.Color.colors)
         AddonListError.__init__(self, self.msg, self.error_name)
 
 

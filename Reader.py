@@ -62,6 +62,7 @@ class Reader(object):
         
         except IOError as e:
             print(e)
+            return []
     
     def dump_dict(self):
         return self.__class__._dict_read_files
