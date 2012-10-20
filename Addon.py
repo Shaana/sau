@@ -1,5 +1,4 @@
 #!/usr/bin/env python
-from symbol import except_clause
 
 __author__ = "Share"
 __email__  = "shaana@student.ethz.ch"
@@ -87,6 +86,8 @@ class Addon(object):
         @type protected: bool
         @param name: the addon's name (just for recognition)
         @type name: str
+        
+        #raise: Error.AddonRootError , Error.AddonInitError
         """
         
         #note difference between self._root and self.url_info assignments
@@ -137,7 +138,9 @@ class Addon(object):
         It's only possible to compare two Addon objects.
         
         Note: If we both url_infos and both folder_names are given, we only use the url_info to compare them and ignore the folder_names.
-
+        
+        @param other: another addon object to compare to
+        @type other: Addon
         """
         
         #basic variables to compare  
@@ -172,17 +175,30 @@ class Addon(object):
             return False
     
     def message(self, message, display_tag=True, end="\n"):
+        """
+        Use this function to display messages in the console.
+        
+        @param message: the message
+        @type message: str
+        @param display_tag: show the message tag [tag]: message
+        @type display_tag: bool
+        @param end: the string to be added at the end of the message
+        @type end: str
+        
+        """
         self.__class__._message.print_message(str(message), display_tag, end)
     
     def message_ok(self):
         """
-        set end="" in the previous message to make it appear on the same line
+        calling self.message with special parameters.
+        set end="" in the previous message to make it appear on the same line.
         """
         self.message(" [{yellow}ok{end}]".format(**Message.Color.colors), display_tag=False)
     
     def message_fail(self):
         """
-        set end="" in the previous message to make it appear on the same line
+        calling self.message with special parameters.
+        set end="" in the previous message to make it appear on the same line.
         """
         self.message(" [{red}fail{end}]".format(**Message.Color.colors), display_tag=False)
     
@@ -192,6 +208,9 @@ class Addon(object):
         Deleting files is only possible within the addon root folder.
         
         returns True, if everything worked. None otherwise
+        
+        @param file: file or folder (absolute path) to be removed recursively
+        @type file: str
         
         OSError is handled
         """
@@ -219,13 +238,13 @@ class Addon(object):
     
        
     def clone(self, stderr=None, stdout=None):
+        """Clones the given remote repository to a local folder."""
         #TODO add threading support here
         self._clone(stderr, stdout)
 
     #TODO maybe add some error, that says if the repo didnt exists, or access denied, etc.. -> AddonRepository[...]Error
     #and use the subprocesss exit status
     def _clone(self, stderr=None, stdout=None): #stderr=subprocess.STDOUT, stdout=subprocess.PIPE
-        """Clones the given remote repository to a local folder."""
         try:
             try:
                 #check if we even have url_info given
@@ -273,11 +292,11 @@ class Addon(object):
             print(e)
  
     def update(self, stderr=None, stdout=None):
+        """Updates the repository in an existing addon folder."""
         #TODO add threading support here
         self._update(stderr,stdout)
       
     def _update(self, stderr=None, stdout=None): #stderr=subprocess.STDOUT, stdout=subprocess.PIPE
-        """Updates the repository in an existing addon folder."""
         try:
             try:               
                 try:
@@ -339,6 +358,10 @@ class Addon(object):
     
     #_name
     def _set_name(self, name):
+        """
+        @param name: addon name
+        @type name: str
+        """
         try:
             if name == None or type(name) == str:
                 self._name = name
@@ -360,6 +383,10 @@ class Addon(object):
         
     #_url_info, (repo_type, url)
     def _set_url_info(self, url_info):
+        """
+        @param name: (repo_type, url)
+        @type name: tuple
+        """
         try:
             if url_info == None:
                 self._url_info = url_info
@@ -380,6 +407,10 @@ class Addon(object):
 
     #_folder_name
     def _set_folder_name(self, folder_name):
+        """
+        @param folder_name: only the folder_name of the addon (NOT a path!)
+        @type folder_name: str
+        """
         assert folder_name != None
         try:
             if type(folder_name) == str:
@@ -402,6 +433,10 @@ class Addon(object):
         return self._protected
     
     def _set_protected(self, protected):
+        """
+        @param protected: protected addons can't be modified
+        @type protected: bool
+        """
         try:
             if type(protected) == bool:
                 self._protected = protected
@@ -476,7 +511,6 @@ class Addon(object):
             print(e)
 
     #'virtual' config_file
-    #TODO maybe make it work for more then just the .pkgmeta file, but for now that's good enough
     def _get_config_file(self):
         file = os.path.join(self.home, self.__class__._config_file)
         if os.path.exists(file) and os.path.isfile(file):
@@ -630,43 +664,15 @@ class Addon(object):
             
         except Error.CommonOSError as e:
             print(e)
- 
-    
-    #TODO, get ride of enhance_url_info, it's just a stupied concept, remove from some functions
-    #Todo, error, text
-    #maybe add a check to see if the urls are the same ? --> error if not AddonEnhanceUrlError()
-    #NOTE: NOT WORKING, just some code fragments
-    def enhance_url_info(self, other):
-        """
-        -->under dev.
-        
-        when there is two addons, that have the 'same' (according to check in AddonList) url
-        then the shorter url is usually the better one!
-        Since the addon will not be added to the AddonList due to colision.
-        It still might be smart to updated the addons (the one already in the list) url_info.
-        We asume that those urls are equal and just take the shorter one (after we striped the protocol).
-        """
-        return 
-        #check for same repo type
-        #then check if url_1 is part of url_2 or vice versa
-         
-        #check if both url_infos are different from None
-        if self.url_info and other.url_info:
-            assert self.url_info[0] == other.url_info[0]
-            #check which is the better (=shorter) one
-            if len(self.url_info[1][self.url_info[1].find("://") + 3: ]) > len(other.url_info[1][other.url_info[1].find("://") + 3: ]):
-                self.url_info = other.url_info
-            
-            return True
-            
-        else:
-            pass # --> Error    
-    
+
     #make sure every situation is covered.
     #TODO test
     def execute(self, allow_overwrite=False):
         """
         run the addon update/clone
+        
+        @param allow_overwrite: allow to overwrite an existing folder. Should the cloned addon match this existing folder (after rename) 
+        @type allow_overwrite: bool
         
         """
         try:
@@ -734,6 +740,9 @@ class Addon(object):
         
         Returns True, if every file/folder mentioned was deleted. None otherwise
         
+        @param list_files: list of folder_names, file_names to be deleted (NOT paths!)
+        @type list_files: list
+        
         """
         try:
             try:
@@ -785,11 +794,10 @@ class Addon(object):
         
         except Error.AddonProtectedError as e:
             print(e)
-   
-    #Todo test        
+        
     def clean_home(self):
         """
-        delete the whole addon folder for a clean new install :D
+        delete the whole addon folder for a clean new install.
         """
         try:
             if self.protected:
