@@ -39,6 +39,13 @@ import Addon
 
 #TODO add a  self.addon = addon to every error, this checks if its type Addon
 
+def enhance_addon_name(addon):
+    protected_tag = ""
+    if addon.protected:
+        protected_tag += "{red}!"
+        
+    return (protected_tag + "{blue}{0}{end}").format(addon.name, **Message.Color.colors)
+
 def color_list(l, color):
     """
     Input: list
@@ -55,7 +62,7 @@ def is_module(name):
 
 class Error(Exception):
     
-    _debug = True
+    _debug = False
     
     def __init__(self, msg, error_name):
         self.error_name = error_name
@@ -106,6 +113,8 @@ class Error(Exception):
     msg = property(_get_msg, _set_msg)
     error_name = property(_get_error_name, _set_error_name)
 
+
+
 ###CommonError
 
 class CommonError(Error):
@@ -140,6 +149,7 @@ class CommonRemoveTreeError(CommonError):
         self.msg = "Unable to delete '{blue}{0}{end}', because it's not a subfolder/subfile of the addon root '{blue}{1}{end}' directory.".format(file, root, **Message.Color.colors)
         CommonError.__init__(self, self.msg, self.error_name)
         
+       
        
 ###AddonError        
 
@@ -179,84 +189,85 @@ class AddonInitError(AddonError):
 class AddonProtectedError(AddonError):
 
     def __init__(self, addon):
+        self.addon = addon
         self.error_name = "AddonProtectedError"
-        self.msg = "Addon '{blue}{0}{end}' is protected and therefore can not be modified in any way (clone, update, clear_ignore, clear_repo)".format(addon.name, **Message.Color.colors)
+        self.msg = "Addon '{0}' is protected and therefore can not be modified in any way (clone, update, clear_ignore, clear_repo, clean_home, ...)".format(enhance_addon_name(self.addon), **Message.Color.colors)
         AddonError.__init__(self, self.msg, self.error_name)
 
 
 class AddonUrlError(AddonError):
 
     def __init__(self, addon):
+        self.addon = addon
         self.error_name = "AddonUrlError"
-        self.msg = "No url given for addon '{blue}{0}{end}'.".format(addon.name, **Message.Color.colors)
+        self.msg = "No url given for addon '{0}'.".format(enhance_addon_name(self.addon), **Message.Color.colors)
         AddonError.__init__(self, self.msg, self.error_name)
 
 
 class AddonRepositoryTypeError(AddonError):
     
     def __init__(self, addon, used_type, supported_types):
+        self.addon = addon
         self.error_name = "AddonRepositoryTypeError"
-        self.msg = "'{blue}{0}{end}' is not a supported respository type for addon '{blue}{1}{end}', Use '{blue}{2}{end}' instead.".format(used_type, addon.name, supported_types, **Message.Color.colors)
+        self.msg = "'{blue}{0}{end}' is not a supported respository type for addon '{1}', Use '{blue}{2}{end}' instead.".format(used_type, enhance_addon_name(self.addon), supported_types, **Message.Color.colors)
         AddonError.__init__(self, self.msg, self.error_name)
 
 
 class AddonRepositoryFolderError(AddonError):
     
     def __init__(self, addon):
+        self.addon = addon
         self.error_name = "AddonRepositoryFolderError"
-        self.msg = "The repository folder '{blue}{0}{end}' doesn't exists for addon '{blue}{1}{end}'.".format(addon.repo_folder, addon.name, **Message.Color.colors)
+        self.msg = "The repository folder '{blue}{0}{end}' doesn't exists for addon '{1}'.".format(addon.repo_folder, enhance_addon_name(self.addon), **Message.Color.colors)
         AddonError.__init__(self, self.msg, self.error_name)
 
 
 class AddonCloneError(AddonError):
 
     def __init__(self, addon, reason):
+        self.addon = addon
         self.error_name = "AddonCloneError"
         if addon.url_info:
-            self.msg = "Cloning from repository '{blue}{0}{end}' ({purple}{1}{end}) failed for addon '{blue}{2}{end}' ({purple}{3}{end}).".format(addon.url_info[1], addon.url_info[0], addon.name, reason, **Message.Color.colors)
+            self.msg = "Cloning from repository '{blue}{0}{end}' ({purple}{1}{end}) failed for addon '{2}' ({purple}{3}{end}).".format(addon.url_info[1], addon.url_info[0], enhance_addon_name(self.addon), reason, **Message.Color.colors)
         else:
-            self.msg = "Cloning from repository '{blue}{0}{end}' ({purple}{1}{end}) failed for addon '{blue}{2}{end}' ({purple}{3}{end}).".format("None", "None", addon.name, reason, **Message.Color.colors)
+            self.msg = "Cloning from repository '{blue}{0}{end}' ({purple}{1}{end}) failed for addon '{2}' ({purple}{3}{end}).".format("None", "None", enhance_addon_name(self.addon), reason, **Message.Color.colors)
         AddonError.__init__(self, self.msg, self.error_name)
 
 
 class AddonUpdateError(AddonError):
 
     def __init__(self, addon, reason):
+        self.addon = addon
         self.error_name = "AddonUpdateError"
-        self.msg = "Updating addon '{blue}{0}{end}' failed ({purple}{1}{end}).".format(addon.name, reason, **Message.Color.colors)
+        self.msg = "Updating addon '{0}' failed ({purple}{1}{end}).".format(enhance_addon_name(self.addon), reason, **Message.Color.colors)
         AddonError.__init__(self, self.msg, self.error_name)
+
 
 class AddonExecuteError(AddonError):
 
     def __init__(self, addon, reason):
+        self.addon = addon
         self.error_name = "AddonExecuteError"
-        self.msg = "Executing addon '{blue}{0}{end}' failed ({purple}{1}{end}).".format(addon.name, reason, **Message.Color.colors)
+        self.msg = "Executing addon '{0}' failed ({purple}{1}{end}).".format(enhance_addon_name(self.addon), reason, **Message.Color.colors)
         AddonError.__init__(self, self.msg, self.error_name)
 
 
 class AddonCleanIgnoreError(AddonError):
 
     def __init__(self, addon, list_files):
+        self.addon = addon
         self.error_name = "AddonCleanIgnoreError"
-        self.msg = "The file(s) '{blue}{0}{end}' could not be deleted for addon '{blue}{1}{end}'.".format(list_files, addon.name, **Message.Color.colors)
+        self.msg = "The file(s) '{blue}{0}{end}' could not be deleted for addon '{1}'.".format(list_files, enhance_addon_name(self.addon), **Message.Color.colors)
         AddonError.__init__(self, self.msg, self.error_name)
 
 
+class AddonUrlOverwriteError(AddonError):
 
-#TODO !
-#raise when the addon folder doesn't exist, but someone tries to access it.
-#quetionable if this is even needed.
-class AddonHomelessError(AddonError):
-       
-    def __init__(self, addon, reason):
-        self.error_name = "AddonHomelessError"
-        self.msg = "Updating addon '{blue}{0}{end}' ({1}).".format(addon.name, reason, **Message.Color.colors)
+    def __init__(self, addon):
+        self.addon = addon
+        self.error_name = "AddonUrlOverwriteError"
+        self.msg = "url_info already exists for addon '{0}'.".format(enhance_addon_name(self.addon), **Message.Color.colors)
         AddonError.__init__(self, self.msg, self.error_name)
-
-
-
-
-
 
 
 
@@ -278,26 +289,23 @@ class AddonListNameError(AddonListError):
         AddonListError.__init__(self, self.msg, self.error_name)
 
 
+#TODO rename to AddonListAddError() to make it more clear ?
 class AddonListColisionError(AddonListError):
     
     def __init__(self, addon_list, addon):
         #use self.name to specify the list
         self.addon = addon
         self.error_name = "AddonListColisionError"
-        self.msg = "it already exists an addon '{0}' with the same url or folder name in the addon_list '{1}'. Continuing.".format(self.addon.name, addon_list.name, **Message.Color.colors)
+        self.msg = "Addon '{0}' alredy exists in AddonList '{blue}{1}{end}'.".format(enhance_addon_name(self.addon), addon_list.name, **Message.Color.colors)
         AddonListError.__init__(self, self.msg, self.error_name)
 
-
-
-class AddonListAddError(AddonListError):
-    pass
 
 class AddonListRemoveError(AddonListError):
     
     def __init__(self, addon_list, addon):
         self.addon = addon
         self.error_name = "AddonListRemoveError"
-        self.msg = "Could not remove addon '{blue}{0}{end}', because it's not in the addon_list '{blue}{1}{end}'".format(self.addon.name, addon_list.name, **Message.Color.colors)
+        self.msg = "Could not remove addon '{0}', because it's not in the addon_list '{blue}{1}{end}'".format(enhance_addon_name(self.addon), addon_list.name, **Message.Color.colors)
         AddonListError.__init__(self, self.msg, self.error_name)
 
 
@@ -309,13 +317,29 @@ class AddonListExtendError(AddonListError):
         self.msg = "invalid list_extend given for addon_list '{blue}{0}{end}'".format(addon_list.name, **Message.Color.colors)
         AddonListError.__init__(self, self.msg, self.error_name)
 
-#??    
-class InvalidLineInConfigFileError(AddonListError):
-    
-    def __init__(self, file, line):
-        self.file = file
-        self.line = line
-        
-    def __str__(self):
-        pass
-        #return self.prefix + "Invalid line in file \'{0}\', line {1}".format(bcolors.YELLOW + self.file + bcolors.END, bcolors.YELLOW + str(self.line) + bcolors.END)
+
+#needed? so far never raised
+class AddonListMergeError(AddonListError):
+
+    def __init__(self, addon_list, reason):
+        self.error_name = "AddonListMergeError"
+        self.msg = "AddonList merged failed ({purple}{0}{end})".format(reason, **Message.Color.colors)
+        AddonListError.__init__(self, self.msg, self.error_name)
+
+
+class AddonListMergeRootError(AddonListError):
+
+    def __init__(self, addon_list, other_list):
+        self.error_name = "AddonListMergeRootError"
+        self.msg = "AddonList root '{blue}{0}{end}' ({purple}{1}{end}) doesn't match '{blue}{2}{end}' ({purple}{3}{end}). Only AddonLists with the same root can be merged.".format(addon_list.root, addon_list.name, other_list.root, other_list.name, **Message.Color.colors)
+        AddonListError.__init__(self, self.msg, self.error_name)
+
+
+class AddonListMergeModeError(AddonListError):
+
+    def __init__(self, addon_list,  mode, list_valid_modes):
+        self.error_name = "AddonListMergeModeError"
+        self.msg = "Invalid merge mode '{blue}{0}{end}', use '{blue}{1}{end}'".format(mode, list_valid_modes, **Message.Color.colors)
+        AddonListError.__init__(self, self.msg, self.error_name)
+
+

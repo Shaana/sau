@@ -42,6 +42,10 @@ class Reader(object):
         Use comment_char = [...] for a list of comment characters.
         """
         try:
+            if not file:
+                print("Reader:Warnsing:nofile")
+                return []
+            
             with open(file, "r") as f:
                 list_line = []
                 for line in f:

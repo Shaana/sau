@@ -29,17 +29,24 @@ import Addon
 import Reader
 
 #Note AddonList objects are always called addon_list, while the actual list of addons is called list_addons
-#Todo add unique names ? and add global class var, that stores all names with a link to the object?
+#TODO add unique names ? and add global class var, that stores all names with a link to the object?
 
 class AddonList(object):
-    #AddonList object counter for unique names
+    
+    #counter for unique names
     _num_lists = 0
     
-    #currently it only creates a list from the home folder OR the given file
-    def __init__(self, name=None, root=None, addon_list_config_file=None):
+    def __init__(self, name=None, root=None, url_config_file=None):
         """
         Every AddonList is specific to a root directory
-        names do not have to be unique, it just helps ;d
+        Currently AddonList names don't have to be unique, but it helps.
+        
+        @param name: AddonList name
+        @type name: str
+        @param root: AddonList root folder (absolute path)
+        @type root: str
+        @param url_config_file: file containing the urls (absolute path)
+        @type url_config_file: str
         
         """
 
@@ -55,7 +62,7 @@ class AddonList(object):
             self._num_addons = 0
             self.list_addons = []
             
-            self.addon_list_config_file = addon_list_config_file
+            self.url_config_file = url_config_file
                             
             #counter
             self.__class__._num_lists += 1
@@ -115,32 +122,34 @@ class AddonList(object):
     def _get_list_addons(self):
         return self._list_addons
     
-    #addon_list_config_file
-    def _set_addon_list_config_file(self, file):
+    #url_config_file
+    def _set_url_config_file(self, file):
         try:
             if not (type(file) == str or file == None):
                 raise Error.CommonTypeError(None, type(file), str)
             
-            self._addon_list_config_file = file
+            self._url_config_file = file
             
         except Error.CommonTypeError as e:
             print(e)
             
-    def _get_addon_list_config_file(self):
-        return self._addon_list_config_file
+    def _get_url_config_file(self):
+        return self._url_config_file
 
     def add_addon(self, addon):
         """
-        Add an addon object to the AddonList object.
+        Add an Addon object to the AddonList object.
+        
+        @param addon: Addon to be added to the AddonList
+        @type addon: Addon
+        
         """
         try:
             if type(addon) != Addon.Addon:
                 raise Error.CommonTypeError(None, type(addon), Addon.Addon)
             
-            #maybe change to 'if a in self.list_addons:'
-            for a in self.list_addons:
-                if a == addon:
-                    raise Error.AddonListColisionError(self, addon)
+            if addon in self.list_addons:
+                raise Error.AddonListColisionError(self, addon)
                 
         except (Error.CommonTypeError, Error.AddonListColisionError) as e:
             print(e)
@@ -152,6 +161,13 @@ class AddonList(object):
     
     #TODO, allow to remove addons by url or folder_name
     def remove_addon(self, addon):
+        """
+        Remove an Addon object from the AddonList object.
+        
+        @param addon: Addon to be removed from the AddonList
+        @type addon: Addon
+        
+        """
         try:
             if addon in self.list_addons:
                 self.list_addons.remove(addon)
@@ -172,7 +188,7 @@ class AddonList(object):
         try:
             #check if it's a list or tuple
             if type(list_addons) == list or type(list_addons) == tuple:
-                #use self.add_addon(addon) method to check if the entry is really an addon and valid
+                #use self.add_addon(addon) method to check for colision and if it's really an addon.
                 for addon in list_addons:
                     self.add_addon(addon)
             else:
@@ -181,30 +197,39 @@ class AddonList(object):
         except Error.AddonListExtendError as e:
             print(e)
 
-    #test protect Blizzard_* folders by default ?
-    #or simply ignore them ?    
-    def parse_root(self):
-        try:
-            for folder in os.listdir(self.root):
-                if os.path.isdir(folder):
-                    protected = False
-                    if folder.startswith("Blizzard_"):
-                        protected = True
-                    addon = Addon(self.root, folder_name=folder, protected=protected)
-                    self.add_addon(addon)
-            
-            return True
+    def parse_root(self, find_url_info=True):
+        """
+        Creates an AddonList from all folders in the root folder.
+        Ignoring addons starting with the name 'Blizzard_'.
         
-        #TODO proper errors    
-        except:
-            pass
-    
-    #Todo proper errors :d      
-    #test if protected flag really works  
-    def parse_addon_list_config_file(self):
-        #format expected: [!]repo_type [whitespace] url
-        #if '!' is set the addon will be protected
-        list_lines = Reader.Reader.get_instance().read_config(self.addon_list_config_file)
+        """
+        try:
+            try:
+                for folder in os.listdir(self.root):
+                    if os.path.isdir(os.path.join(self.root, folder)):
+                        if not folder.startswith("Blizzard_"):
+                            addon = Addon.Addon(self.root, folder_name=folder)
+                            if find_url_info:
+                                addon.parse_home_for_url_info()
+                            self.add_addon(addon)
+                
+                return True
+            
+            except OSError as e:
+                raise Error.CommonOSError(e)
+            
+        except Error.CommonOSError as e:
+            print(e)
+      
+    def parse_url_config_file(self):
+        """
+        Creates an AddonList from all urls in the given config file.
+        
+        format expected: [!]repo_type [whitespace] url
+        if '!' is set the addon will be protected
+        
+        """
+        list_lines = Reader.Reader.get_instance().read_config(self.url_config_file)
         
         pattern = "^(!?)(git|svn|hg)(?:[\t ]+)(.+)$"
         
@@ -218,10 +243,7 @@ class AddonList(object):
                     protected = True 
                 addon = Addon.Addon(self.root, (match.group(2), match.group(3)), protected=protected)
                 self.add_addon(addon)
-            else:
-                pass
-                #TODO
-                #error.ReadFile_LineError(addon_list_file, cur_line)
+
             cur_line += 1
         
         return True
@@ -230,7 +252,10 @@ class AddonList(object):
     #parse_pkgmeta_file --> take the wowace, ... and create a list out of those.
     def parse_pkgmeta_info(self, dict_info):
         """
-        Creates a new addon_list from a given pkgmeta parse - output of the parse_pkgmeta_file() from the Addon class.
+        Creates a new addon_list from a given pkgmeta parse.
+        
+        @param dict_info: output of the parse_pkgmeta_file() from the Addon class
+        @type dict_info: dict
         
         """
         try:
@@ -239,8 +264,9 @@ class AddonList(object):
                             "^(?:.+?)://(git|svn|hg).curseforge.net/wow/([A-Z0-9a-z_~.-]+).*$",
                             "^(?:.+?)://(git|svn|hg).wowinterface.com/([A-Z0-9a-z_~.-]+)-(?:[0-9]+).+$"]
             
-            #is this to way to check it, if its not None ?
-            if dict_info["externals"]:
+            assert "externals" in dict_info
+            
+            if dict_info and "externals" in dict_info:
                 for url_info in dict_info["externals"]:
                     for pattern in list_patterns:
                         match = re.match(pattern, url_info[1])
@@ -256,88 +282,117 @@ class AddonList(object):
         except:
             pass
     
-    #support function to read the addons in the list. Mostly for debugging.
+    #support function to dump the addons in the current list. Mostly for debugging.
     def dump_list_addons(self):
         for addon in self.list_addons:
             print(addon)
     
-    #Todo test hard !
-    #  --> add with enhance_url ?
-    def merge(self, other_list, mode=None):
+    def merge(self, other_list, mode=None, list_ignore=[]):
         """
         Returns a new AddonList object with the merged list
         Only AddonLists with the same root can be merged !     
-             
-        mode: 
+        
+        @param other_list: AddonList to merge
+        @type other_list: AddonList
+        @param mode: merge mode
+        @type mode: str or int
+          
+        modes: 
         - standard 1
         - difference 2
         - match 3
+        - unique 4 (from first given list)
         
         """
-        try:
+        list_valid_modes = ["standard", "difference", "match", "unique"]
+        
+        try:          
+            if self.root != other_list.root:
+                raise Error.AddonListMergeRootError(self, other_list)
+            
             #For now we copy the whole list first, merge into that one and return it.
             temp_list = copy.deepcopy(self)
-            if self.root != other_list.root:
-                pass
-                #raise Error.AddonListMergeRootError(self, addon_list) # use self.root, self.name, addon-list. ....
             
             # merge into the copy of the original list, add every addon except dublicates.
             if mode == 1 or mode == "standard": 
                 for addon in other_list.list_addons: 
-                    temp_list.add_addon(addon, True)
+                    if not addon in self.list_addons:
+                        temp_list.add_addon(addon)
                 return temp_list
                         
-            #like if a.merge(b), always put the new table into a ?
-            #pretty much the same code for both modes, just return the list accordningly
-            elif mode == 2 or mode == 3 or mode == "difference" or mode == "match":
-                list_match = AddonList("merge_list_match_" + self.__class__._num_lists, self.root)
-                list_difference = AddonList("merge_list_difference_" + self.__class__._num_lists, self.root)
+            elif mode == 2 or mode == 3 or mode == 4 or mode == "difference" or mode == "match" or mode =="unique":
                 #we remove every addon that is in both lists from the list temp_other.
                 #and we end up with a list that only contains addons that are unique in the other_list
+                
+                list_match = AddonList("merge_list_" + str(self.__class__._num_lists), self.root)
+                list_difference = AddonList("merge_list_" + str(self.__class__._num_lists), self.root)
                 temp_other = copy.deepcopy(other_list)
 
                 for addon in temp_list.list_addons:
-                    match = False
-                    for other in temp_other.list_addons:
-                        if addon == other:
-                            #add enhance_...() here.
-                            list_match.add_addon(addon)
-                            temp_other.remove_addon(other)
-                            match = True
-                            break
-                    if not match:
+                    if addon in temp_other.list_addons:
+                        list_match.add_addon(addon)
+                        temp_other.remove_addon(addon)
+                    else:
                         list_difference.add_addon(addon)
                 
-                #DEBUG
-                """
-                print("---match")
-                t_match.dump_list_addons()
-                print("---diff")
-                t_difference.dump_list_addons()
-                print("---o")
-                o.dump_list_addons()
-                """
-                
                 if mode == 2 or mode == "difference": 
-                    return list_difference
+                    return list_difference.merge(temp_other, "standard")
                 elif mode == 3 or mode == "match":
                     return list_match
-                    
-                    
+                elif mode == 4 or mode == "unique":
+                    return list_difference               
+
             else:
-                pass # raise Error.AddonListMergeModeError(mode, list_valid_modes)
+                raise Error.AddonListMergeModeError(self, mode, list_valid_modes)
             
-        except:
-            pass
+        except (Error.AddonListMergeRootError, Error.AddonListMergeModeError) as e:
+            print(e)
 
+    #TODO give it some love
+    def enhance_addon_list(self, list_ignore=[]):
+            
+        try:
+            list_ignore.append("libstub")
+            
+            temp_list = copy.deepcopy(self)
+            list_cleaned = AddonList("cleaned_list", self.root)
 
-    def execute(self):
+            for addon in temp_list.list_addons:
+                match = False
+                for ignore in list_ignore:
+                    match = re.search(ignore, addon.name, re.IGNORECASE) # ?
+                    if match:
+                        break
+                    
+                if not match:
+                    addon.enhance_url_info()
+                    if not addon in list_cleaned.list_addons:
+                        list_cleaned.add_addon(addon)
+            
+            return list_cleaned
+  
+                
+        except Exception as e:
+            print(e)
+            
+    
+    #TODO far from done ...
+    def execute(self, clean_repo=False, clean_ignore=False):
         """
         run update or clone for every addon in the list
         """
         try:
+            libs = AddonList("libs", self.root)
             for addon in self.list_addons:
                 addon.execute()
+                addon.parse_pkgmeta_file()
+                temp_list = AddonList("temp", self.root)
+                temp_list.parse_pkgmeta_info(addon.config_info)
+                libs = libs.merge(temp_list, "standard")
+                
+            
+            libs.name = "libs_" + self.name
+            return libs
         except:
             pass
     
@@ -347,7 +402,7 @@ class AddonList(object):
     num_addons = property(_get_num_addons)
     list_addons = property(_get_list_addons, _set_list_addons)
     
-    addon_list_config_file = property(_get_addon_list_config_file, _set_addon_list_config_file)
+    url_config_file = property(_get_url_config_file, _set_url_config_file)
     
     
     

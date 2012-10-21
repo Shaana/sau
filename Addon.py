@@ -31,13 +31,6 @@ import Error
 import Reader
 import Message
 
-
-#TODO 
-#add a find repo from folder function
-#    def ParseGitFolder(home):
-
-#
-
 #TODO add threading support for cloning, with a global class variable to keep track of the cloning instances :D
 
 #TODO rework parse_pkgmeta_file()
@@ -128,8 +121,9 @@ class Addon(object):
     def __str__(self):
         #TODO rework
         #return("name: {}; home: {}; url: {} {}; folder: {}; protected: {}".format(self.name, self.home, self.repo_type, self.url, self.folder_name, self.protected))
-        return self.name
+        return self.name + ": " + str(self.protected)
     
+    #TODO add ignore case when comparing urls ! (and repo_type)
     def __eq__(self, other):
         """
         Addons are considered the same if the repot_type and url are the same. (tailing '/' are stripped for comparison)
@@ -142,7 +136,6 @@ class Addon(object):
         @param other: another addon object to compare to
         @type other: Addon
         """
-        
         #basic variables to compare  
         repo_type_1 = None
         repo_type_2 = None
@@ -153,11 +146,11 @@ class Addon(object):
           
         if self.url_info:
             repo_type_1 = self.url_info[0]
-            url_1 = self.url_info[1].rstrip("/")
+            url_1 = self.url_info[1].rstrip("/") #.lower()
     
         if other.url_info:
             repo_type_2 = other.url_info[0]
-            url_2 = other.url_info[1].rstrip("/")
+            url_2 = other.url_info[1].rstrip("/") #.lower()
 
         #if both url_infos and both folder_names are given, the folder_names DON'T have to match.
         if url_1 and url_2:
@@ -237,10 +230,10 @@ class Addon(object):
             print(e)
     
        
-    def clone(self, stderr=None, stdout=None):
+    def clone(self, stderr=subprocess.STDOUT, stdout=subprocess.PIPE): #stderr=None, stdout=None
         """Clones the given remote repository to a local folder."""
         #TODO add threading support here
-        self._clone(stderr, stdout)
+        return self._clone(stderr, stdout)
 
     #TODO maybe add some error, that says if the repo didnt exists, or access denied, etc.. -> AddonRepository[...]Error
     #and use the subprocesss exit status
@@ -294,7 +287,7 @@ class Addon(object):
     def update(self, stderr=None, stdout=None):
         """Updates the repository in an existing addon folder."""
         #TODO add threading support here
-        self._update(stderr,stdout)
+        return self._update(stderr,stdout)
       
     def _update(self, stderr=None, stdout=None): #stderr=subprocess.STDOUT, stdout=subprocess.PIPE
         try:
@@ -494,13 +487,13 @@ class Addon(object):
         The name of this file and the folder_name have to match.
         Otherwise the World of Warcraft client won't recognize it as a valid addon.
         
-        Currently a valid name only contains the following characters [A-Z0-9a-z._-]
+        Currently a valid name only contains the following characters [A-Z0-9a-z.!_-]
         """
         try:
             try:
                 #currently returns the first toc file found. There shouldn't be more then one anyway !
                 for line in os.listdir(self.home):
-                    a = re.match("^([A-Z0-9a-z._-]+).toc$", line)
+                    a = re.match("^([A-Z0-9a-z.!_-]+).toc$", line)
                     if a:
                         return a.group(1)
                             
@@ -625,7 +618,6 @@ class Addon(object):
             #config file missing ! --> Error
             pass
     
-    #TODO further testing, error
     def parse_home_for_url_info(self):
         """
         gets the url_info from an given folder_name, if it exists.
@@ -643,31 +635,49 @@ class Addon(object):
                              "svn" : ("URL:\s*([A-Z0-9a-z:./_~.-]+)", ["svn", "info"]),
                              "hg" : ("default\s*=\s*([A-Z0-9a-z:./_~.s-]+)", ["hg", "paths"])}
                 
+                #we don't want to overwrite an existing url_info
                 if self.url_info:
-                    assert self.url_info == None
-                    pass # we dont want to overwrite an existing url_info
-                    #raise Error.AddonListUrlError()
+                    raise Error.AddonUrlOverwriteError(self)
                 
-                for repo_type in self.__class__._supported_repository_types:
-                    if os.path.exists(os.path.join(self.home, "." + repo_type)):
-                        os.chdir(self.home)
-                        output = subprocess.check_output(dict_repo[repo_type][1])
-                        match = re.search(dict_repo[repo_type][0], str(output, sys.stdout.encoding)) 
-                        if match:
-                            self.url_info = (repo_type, match.group(1))
+                if self.repo_folder:
+                    os.chdir(self.home)
+                    repo_type = self.repo_type
+                    output = subprocess.check_output(dict_repo[repo_type][1])
+                    match = re.search(dict_repo[repo_type][0], str(output, sys.stdout.encoding)) 
+                    if match:
+                        self.url_info = (repo_type, match.group(1))
+                        
+                return True
                             
             except OSError as e:
                 raise Error.CommonOSError(e)
             
-            except subprocess.CalledProcessError as e:
+            except (subprocess.CalledProcessError, Error.AddonUrlOverwriteError) as e:
                 print(e)
             
         except Error.CommonOSError as e:
             print(e)
-
+            
+    #TODO make smarter !   
+    def enhance_url_info(self):
+        try:
+            assert self.url_info != None
+            assert self.protected == False
+            
+            if self.repo_type == "svn":
+                match = re.match("^(.+?/trunk)/.+$", self.url_info[1])
+                if match:
+                    self.url_info = ("svn", match.group(1))
+            
+            return True
+            
+        except Exception as e:
+            print(e)
+      
     #make sure every situation is covered.
     #TODO test
-    def execute(self, allow_overwrite=False):
+    #add an option, remove addons if full renameing failed or keep them in the temp_folder
+    def execute(self, allow_overwrite=False, update_only=False, clone_only=False):
         """
         run the addon update/clone
         
@@ -678,25 +688,26 @@ class Addon(object):
         try:
             try:
                 try:
-                    if self.repo_folder and os.path.exists(self.repo_folder): #not checking if the home exists firs (pointless)
-                        self.message("Updating addon '{blue}{0}{end}'...".format(self.name, **Message.Color.colors), end="")
+                    if not clone_only and self.repo_folder and os.path.exists(self.repo_folder): #not checking if the home exists firs (pointless)
+                        self.message("Updating addon '{blue}{0}{end}'...".format(self.name, **Message.Color.colors)) #end=""
                         if self.update() != 0:
                             self.message_fail()
                             raise Error.AddonExecuteError(self, "update() returned non zero exit status")
                         
                         self.message_ok()
                         
-                    elif self.url_info:
-                        self.message("Cloning addon '{blue}{0}{end}'...".format(self.name, **Message.Color.colors))
+                    elif not update_only and self.url_info:
+                        self.message("Cloning addon '{blue}{0}{end}'...".format(self.name, **Message.Color.colors)) #end=""
                         
                         if self.clone() != 0:
                             self.message_fail()
-                            raise Error.AddonExecuteError("clone() returned non zero exit status")
+                            raise Error.AddonExecuteError(self, "clone() returned non zero exit status")
                             
                         toc_file_name = self.toc_file_name
                         
                         if not toc_file_name:
                             self.message_fail()
+                            #self._remove_tree(self.home)
                             raise Error.AddonExecuteError(self, "toc file name is None, can't continue")
                         
                         new_folder = os.path.join(self.root, toc_file_name)
@@ -710,9 +721,9 @@ class Addon(object):
                                 self.folder_name = toc_file_name
                               
                             elif os.path.exists(new_folder) and not allow_overwrite:
-                                self._remove_tree(self.home)
                                 self.message_fail()
-                                raise Error.AddonExecuteError("not allowed to overwrite existing new_home_folder, therefor cannot rename")
+                                #self._remove_tree(self.home)
+                                raise Error.AddonExecuteError(self, "not allowed to overwrite existing new_home_folder, therefor cannot rename")
     
                             else:
                                 os.rename(self.home, new_folder)
