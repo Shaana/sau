@@ -35,6 +35,8 @@ import Message
 
 #TODO rework parse_pkgmeta_file()
 #TODO add os.path.userexpand() to urls, files, etc.
+#TODO check if its an absolute path, does the url start with a '/' ?
+
 
 class Addon(object):
     """
@@ -91,6 +93,7 @@ class Addon(object):
                 raise Error.AddonRootError()
 
             if (url_info) or (folder_name):
+                #TODO check if its an absolute path, does the url start with a '/' ?
                 self._root = os.path.expanduser(root)
                 self.name = name                       
                 self.url_info = url_info
@@ -658,7 +661,12 @@ class Addon(object):
         except Error.CommonOSError as e:
             print(e)
             
-    #TODO make smarter !   
+    #TODO make smarter !
+    #add something to catch u:svn://svn.wowace.com/wow/callbackhandler/mainline/tags/1.0.3/CallbackHandler-1.0:
+    #u:git://git.wowace.com/wow/drdata-1-0/mainline.git
+    #u:git://git.wowace.com/wow/drdata-1-0/mainline
+    #even if the .git is missing, consider them the same and remove the one without git
+    # do something about libdatabroker-1-1, doesnt seam to come with .toc file
     def enhance_url_info(self):
         try:
             assert self.url_info != None
@@ -677,7 +685,8 @@ class Addon(object):
     #make sure every situation is covered.
     #TODO test
     #add an option, remove addons if full renameing failed or keep them in the temp_folder
-    def execute(self, allow_overwrite=False, update_only=False, clone_only=False):
+    #todo implement option clean_repo=
+    def execute(self, allow_overwrite=False, update_only=False, clone_only=False, clean_repo=False):
         """
         run the addon update/clone
         
@@ -730,6 +739,9 @@ class Addon(object):
                                 self.folder_name = toc_file_name
                             
                         self.message_ok()
+                        #TODO test, fix, implement
+                        #if clean_repo:
+                        #    self.clean_repository_folder()
                         return True
         
                     else:
@@ -784,7 +796,20 @@ class Addon(object):
                 
         except Error.CommonOSError as e:
             print(e)
-
+    
+    #TODO add a return to see if it worked
+    def _crawl_directory(self, home, delete_name):
+        """
+        Search recursivly in the root for any folder matching the folder_name and delete it.
+        """
+        for folder_name in os.listdir(home):
+            folder = os.path.join(home, folder_name)
+            if os.path.isdir(folder):
+                if folder_name == delete_name:
+                    self._remove_tree(folder)
+                else:
+                    self._crawl_directory(folder, delete_name)
+    
     def clean_repository_folder(self):
         """
         Deletes the repository folder.
@@ -795,11 +820,15 @@ class Addon(object):
         try:
             if self.protected:
                 raise Error.AddonProtectedError(self)
-
-            if os.path.exists(self.repo_folder):
-                #OSError handled by _remove_tree()
-                if not self._remove_tree(self.repo_folder):
-                    return False
+            
+            if self.repo_type == "svn":
+                self._crawl_directory(self.home, ".svn")
+                
+            else:
+                if os.path.exists(self.repo_folder):
+                    #OSError handled by _remove_tree()
+                    if not self._remove_tree(self.repo_folder):
+                        return False
              
             return True
         

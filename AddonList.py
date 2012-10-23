@@ -30,6 +30,7 @@ import Reader
 
 #Note AddonList objects are always called addon_list, while the actual list of addons is called list_addons
 #TODO add unique names ? and add global class var, that stores all names with a link to the object?
+     
 
 class AddonList(object):
     
@@ -196,8 +197,8 @@ class AddonList(object):
             
         except Error.AddonListExtendError as e:
             print(e)
-
-    def parse_root(self, find_url_info=True):
+    
+    def parse_root(self, find_url_info=True, list_protected=[]):
         """
         Creates an AddonList from all folders in the root folder.
         Ignoring addons starting with the name 'Blizzard_'.
@@ -205,10 +206,10 @@ class AddonList(object):
         """
         try:
             try:
-                for folder in os.listdir(self.root):
-                    if os.path.isdir(os.path.join(self.root, folder)):
-                        if not folder.startswith("Blizzard_"):
-                            addon = Addon.Addon(self.root, folder_name=folder)
+                for folder_name in os.listdir(self.root):
+                    if os.path.isdir(os.path.join(self.root, folder_name)):
+                        if not match_list_protected(folder_name, list_protected):
+                            addon = Addon.Addon(self.root, folder_name=folder_name)
                             if find_url_info:
                                 addon.parse_home_for_url_info()
                             self.add_addon(addon)
@@ -404,7 +405,12 @@ class AddonList(object):
     
     url_config_file = property(_get_url_config_file, _set_url_config_file)
     
-    
+
+def match_list_protected(folder_name, list_protected):
+    for pattern in list_protected:
+        match = re.match(pattern, folder_name)
+        if match:
+            return True
     
     
     

@@ -23,6 +23,8 @@ along with sau.  If not, see <http://www.gnu.org/licenses/>.
 #import Error
 
 #TODO replace Errors with error classes from Error.py
+#TODO add a config option, like lines starting with @![variable]=....
+# @!list_protected=["..", ".."]
 
 def chomp(s, c=None):
     """Removes leading and trailing chars of a string."""
